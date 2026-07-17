@@ -76,6 +76,7 @@ import { GatewaysList } from "./pages/apps/gateways/GatewaysList";
 import { GatewayDetail } from "./pages/apps/gateways/GatewayDetail";
 import { CompanySkills } from "./pages/CompanySkills";
 import { SkillStudio } from "./pages/SkillStudio";
+import { RuntimeProfiles } from "./pages/RuntimeProfiles";
 import { Secrets } from "./pages/Secrets";
 import { CompanyImport } from "./pages/CompanyImport";
 import { DesignGuide } from "./pages/DesignGuide";
@@ -185,6 +186,7 @@ function boardRoutes(streamlinedUiEnabled: boolean) {
       <Route element={<HiddenSettingsPageGate pageKey="company.secrets" />}>
         <Route path="company/settings/secrets" element={<Secrets />} />
       </Route>
+      <Route path="company/settings/runtime-profiles" element={<RuntimeProfiles />} />
       <Route path="company/settings/tools" element={<LegacyToolsSettingsRedirect />} />
       <Route path="company/settings/tools/:tab" element={<LegacyToolsSettingsRedirect />} />
       <Route path="tools" element={<LegacyToolsRedirect />} />

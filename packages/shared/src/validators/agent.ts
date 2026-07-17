@@ -83,6 +83,7 @@ export const createAgentSchema = z.object({
   desiredSkills: z.array(agentDesiredSkillSelectionSchema).optional(),
   adapterType: agentAdapterTypeSchema,
   adapterConfig: adapterConfigSchema.optional().default({}),
+  runtimeProfileId: z.string().uuid().nullable().optional(),
   instructionsBundle: createAgentInstructionsBundleSchema.optional(),
   runtimeConfig: agentRuntimeConfigSchema.optional().default({}),
   defaultEnvironmentId: z.string().guid().optional().nullable(),

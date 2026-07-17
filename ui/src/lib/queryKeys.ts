@@ -136,6 +136,9 @@ export const queryKeys = {
     run: (companyId: string, runId: string) =>
       ["smoke-lab", companyId, "runs", runId] as const,
   },
+  runtimeProfiles: {
+    list: (companyId: string) => ["runtime-profiles", companyId] as const,
+  },
   companySkills: {
     list: (companyId: string) => ["company-skills", companyId] as const,
     listRecent: (companyId: string) =>

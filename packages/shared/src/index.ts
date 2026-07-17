@@ -2573,6 +2573,7 @@ export type {
 } from "./environment-support.js";
 
 export type { AdapterRegistryEntry } from "./types/adapter-registry.js";
+export type { RuntimeProfile } from "./types/runtime-profile.js";
 export type {
   FolderKind,
   Folder,
@@ -2607,6 +2608,12 @@ export {
   type MoveFolderItem,
   type EnsureMySkillFolder,
 } from "./validators/folder.js";
+export {
+  createRuntimeProfileSchema,
+  updateRuntimeProfileSchema,
+  type CreateRuntimeProfile,
+  type UpdateRuntimeProfile,
+} from "./validators/runtime-profile.js";
 
 export {
   environmentCustomImageTemplateKindSchema,

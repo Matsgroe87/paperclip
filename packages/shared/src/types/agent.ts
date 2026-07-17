@@ -14,6 +14,7 @@ import type {
 } from "../trust-policy.js";
 import type { AgentOrgChainHealth } from "../agent-eligibility.js";
 import type { AgentApiKeyScope } from "../validators/agent.js";
+import type { RuntimeProfile } from "./runtime-profile.js";
 
 export interface AgentPermissions extends Record<string, unknown> {
   canCreateAgents: boolean;
@@ -84,6 +85,8 @@ export interface Agent {
   adapterType: AgentAdapterType;
   adapterConfig: Record<string, unknown>;
   runtimeConfig: AgentRuntimeConfig;
+  runtimeProfileId?: string | null;
+  runtimeProfile?: Pick<RuntimeProfile, "id" | "name" | "adapterType"> | null;
   defaultEnvironmentId?: string | null;
   budgetMonthlyCents: number;
   spentMonthlyCents: number;

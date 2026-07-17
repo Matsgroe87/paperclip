@@ -814,9 +814,19 @@ function AgentMetaColumns({
 }) {
   const model = getConfiguredModel(agent);
   const adapterLabel = getAdapterLabel(agent.adapterType);
+  const profileName = agent.runtimeProfile?.name ?? "Custom";
   return (
     <>
       <div className="w-44 min-w-0 leading-tight">
+        <div
+          className={cn(
+            "truncate text-[11px] font-medium",
+            agent.runtimeProfile ? "text-primary" : "text-muted-foreground/70",
+          )}
+          title={agent.runtimeProfile ? `Runtime profile: ${profileName}` : "No runtime profile bound"}
+        >
+          {profileName}
+        </div>
         <div
           className="truncate font-mono text-xs text-muted-foreground"
           title={model ?? undefined}
