@@ -110,6 +110,27 @@ async function readMigrationFileContent(migrationFile: string): Promise<string> 
   return readFile(new URL(`./migrations/${migrationFile}`, import.meta.url), "utf8");
 }
 
+async function loadAppliedMigrationsFromCreatedAt(
+  sql: ReturnType<typeof postgres>,
+  qualifiedTable: string,
+  availableMigrations: string[],
+): Promise<string[]> {
+  const journalEntries = await listJournalMigrationEntries();
+  if (journalEntries.length === 0) return [];
+
+  const lastDbRows = await sql.unsafe<{ created_at: string | number | null }[]>(
+    `SELECT created_at FROM ${qualifiedTable} ORDER BY created_at DESC LIMIT 1`,
+  );
+  const lastCreatedAt = Number(lastDbRows[0]?.created_at ?? -1);
+  if (!Number.isFinite(lastCreatedAt) || lastCreatedAt < 0) return [];
+
+  return journalEntries
+    .filter((entry) => availableMigrations.includes(entry.fileName))
+    .filter((entry) => entry.folderMillis <= lastCreatedAt)
+    .map((entry) => entry.fileName)
+    .slice(0, availableMigrations.length);
+}
+
 async function orderMigrationsByJournal(migrationFiles: string[]): Promise<string[]> {
   const journalEntries = await listJournalMigrationEntries();
   const orderByFileName = new Map(journalEntries.map((entry) => [entry.fileName, entry.order]));
@@ -445,25 +466,31 @@ async function loadAppliedMigrations(
       // Best-effort: when all hashes resolve, this is authoritative.
       if (appliedFromHashes.length === rows.length) return appliedFromHashes;
 
-      // Partial hash resolution can happen when files have changed; return what we can trust.
+      // If the journal already has at least one row per current migration, prefer
+      // created_at ordering over stale hashes so legacy history does not look pending.
+      if (columnNames.has("created_at") && rows.length >= availableMigrations.length) {
+        const appliedFromCreatedAt = await loadAppliedMigrationsFromCreatedAt(
+          sql,
+          qualifiedTable,
+          availableMigrations,
+        );
+        if (appliedFromCreatedAt.length >= appliedFromHashes.length) {
+          return appliedFromCreatedAt;
+        }
+      }
+
+      // Partial hash resolution can happen when a single migration is genuinely missing.
       return appliedFromHashes;
     }
 
-    // Fallback only when hashes are unavailable/unresolved.
     if (columnNames.has("created_at")) {
-      const journalEntries = await listJournalMigrationEntries();
-      if (journalEntries.length > 0) {
-        const lastDbRows = await sql.unsafe<{ created_at: string | number | null }[]>(
-          `SELECT created_at FROM ${qualifiedTable} ORDER BY created_at DESC LIMIT 1`,
-        );
-        const lastCreatedAt = Number(lastDbRows[0]?.created_at ?? -1);
-        if (Number.isFinite(lastCreatedAt) && lastCreatedAt >= 0) {
-          return journalEntries
-            .filter((entry) => availableMigrations.includes(entry.fileName))
-            .filter((entry) => entry.folderMillis <= lastCreatedAt)
-            .map((entry) => entry.fileName)
-            .slice(0, rows.length);
-        }
+      const appliedFromCreatedAt = await loadAppliedMigrationsFromCreatedAt(
+        sql,
+        qualifiedTable,
+        availableMigrations,
+      );
+      if (appliedFromCreatedAt.length > 0) {
+        return appliedFromCreatedAt.slice(0, rows.length);
       }
     }
   }

@@ -15,6 +15,7 @@ import {
   issueExecutionDecisions,
   issues,
   issueComments,
+  runtimeProfiles,
 } from "@paperclipai/db";
 import {
   AGENT_DEFAULT_MAX_CONCURRENT_RUNS,
@@ -367,6 +368,38 @@ export function agentService(db: Db) {
     }));
   }
 
+  async function attachRuntimeProfiles<T extends {
+    runtimeProfileId: string | null;
+    companyId: string;
+  }>(rows: T[]) {
+    const profileIds = Array.from(
+      new Set(rows.map((row) => row.runtimeProfileId).filter((id): id is string => Boolean(id))),
+    );
+    if (profileIds.length === 0) {
+      return rows.map((row) => ({ ...row, runtimeProfile: null }));
+    }
+    const profiles = await db
+      .select({
+        id: runtimeProfiles.id,
+        companyId: runtimeProfiles.companyId,
+        name: runtimeProfiles.name,
+        adapterType: runtimeProfiles.adapterType,
+      })
+      .from(runtimeProfiles)
+      .where(inArray(runtimeProfiles.id, profileIds));
+    const byId = new Map(profiles.map((profile) => [profile.id, profile]));
+    return rows.map((row) => {
+      const profile = row.runtimeProfileId ? byId.get(row.runtimeProfileId) : null;
+      return {
+        ...row,
+        runtimeProfile:
+          profile && profile.companyId === row.companyId
+            ? { id: profile.id, name: profile.name, adapterType: profile.adapterType }
+            : null,
+      };
+    });
+  }
+
   async function getById(id: string) {
     const row = await db
       .select()
@@ -378,7 +411,8 @@ export function agentService(db: Db) {
       listCompanyAgentRows(row.companyId),
       hydrateAgentSpend([row]).then((rows) => rows[0]!),
     ]);
-    return normalizeAgentRow(hydrated, companyRows);
+    const normalized = normalizeAgentRow(hydrated, companyRows);
+    return (await attachRuntimeProfiles([normalized]))[0]!;
   }
 
   async function requireGetById(id: string) {
@@ -581,7 +615,8 @@ export function agentService(db: Db) {
         listCompanyAgentRows(companyId),
       ]);
       const hydrated = await hydrateAgentSpend(rows);
-      return normalizeAgentRows(hydrated, allCompanyRows);
+      const normalized = normalizeAgentRows(hydrated, allCompanyRows);
+      return attachRuntimeProfiles(normalized);
     },
 
     getById,
