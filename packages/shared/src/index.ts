@@ -2314,6 +2314,7 @@ export type {
   MoveFolderItemRequest,
   EnsureMySkillFolderRequest,
 } from "./types/folder.js";
+export type { RuntimeProfile } from "./types/runtime-profile.js";
 
 export {
   adapterRegistryEntrySchema,

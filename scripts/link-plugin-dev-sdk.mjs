@@ -93,6 +93,19 @@ export function linkSdkInto(packageDir) {
     if (error?.code !== "ENOENT") throw error;
   }
 
-  symlinkSync(relativeSdkDir, linkTarget, "dir");
+  try {
+    symlinkSync(relativeSdkDir, linkTarget, "dir");
+  } catch (error) {
+    if (!isSymlinkPrivilegeError(error)) throw error;
+    symlinkSync(resolve(scopeDir, relativeSdkDir), linkTarget, "junction");
+  }
   return true;
+}
+
+function isSymlinkPrivilegeError(error) {
+  return (
+    error?.code === "EPERM" ||
+    /privilege required/i.test(String(error?.message ?? "")) ||
+    /operation not permitted/i.test(String(error?.message ?? ""))
+  );
 }

@@ -197,6 +197,9 @@ The decisions desk stores queue membership, decide-by/snooze state, and retentio
 Triage writes serialize on the company and attention-source identity so concurrent partial updates preserve both fields and produce monotonic history versions.
 
 `decision_retention` tracks the last observed source `activityAt`, Keep, reversible archive provenance, and monotonic source/archive versions. `decision_archive_notification_outbox` has a unique key over company, source identity, archive version, and immutable origin agent so repeated sweeps cannot enqueue duplicate notifications; delivery claims are retryable and coalesced per agent.
+## Runtime profiles
+
+`runtime_profiles` stores reusable, company-scoped runtime configuration for agents. A profile owns adapter/model/startup configuration and can be bound to multiple agents through `agents.runtime_profile_id`. Updating a profile propagates its shared runtime fields to every bound agent; each agent retains its own instructions, workspace configuration, and other profile-independent settings.
 
 ## Plugin database namespaces
 
