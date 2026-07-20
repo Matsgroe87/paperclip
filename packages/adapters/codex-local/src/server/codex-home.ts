@@ -177,11 +177,22 @@ async function createExpectedSymlink(target: string, source: string): Promise<vo
   }
 }
 
+function isSymlinkPrivilegeError(error: unknown): boolean {
+  const err = error as NodeJS.ErrnoException | undefined;
+  const message = typeof err?.message === "string" ? err.message : "";
+  return err?.code === "EPERM" || /privilege required/i.test(message) || /operation not permitted/i.test(message);
+}
+
 export async function ensureSymlink(target: string, source: string): Promise<void> {
   const existing = await fs.lstat(target).catch(() => null);
   if (!existing) {
     await ensureParentDir(target);
-    await createExpectedSymlink(target, source);
+    try {
+      await createExpectedSymlink(target, source);
+    } catch (error) {
+      if (!isSymlinkPrivilegeError(error)) throw error;
+      await fs.copyFile(source, target);
+    }
     return;
   }
 
@@ -198,14 +209,24 @@ export async function ensureSymlink(target: string, source: string): Promise<voi
     // than silent removal.
     if (existing.isDirectory()) return;
     await fs.unlink(target);
-    await createExpectedSymlink(target, source);
+    try {
+      await createExpectedSymlink(target, source);
+    } catch (error) {
+      if (!isSymlinkPrivilegeError(error)) throw error;
+      await fs.copyFile(source, target);
+    }
     return;
   }
 
   if (await isExpectedSymlink(target, source)) return;
 
   await fs.unlink(target);
-  await createExpectedSymlink(target, source);
+  try {
+    await createExpectedSymlink(target, source);
+  } catch (error) {
+    if (!isSymlinkPrivilegeError(error)) throw error;
+    await fs.copyFile(source, target);
+  }
 }
 
 async function ensureCopiedFile(target: string, source: string): Promise<void> {

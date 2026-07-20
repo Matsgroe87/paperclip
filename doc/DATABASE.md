@@ -177,6 +177,10 @@ Both tables use a unique key on `(company_id, user_id, resource_id)` and keep `s
 
 This policy makes training exports self-describing while keeping the decision record usable after a comment deletion without retaining content the author removed.
 
+## Runtime profiles
+
+`runtime_profiles` stores reusable, company-scoped runtime configuration for agents. A profile owns adapter/model/startup configuration and can be bound to multiple agents through `agents.runtime_profile_id`. Updating a profile propagates its shared runtime fields to every bound agent; each agent retains its own instructions, workspace configuration, and other profile-independent settings.
+
 ## Plugin database namespaces
 
 The plugin runtime tracks plugin-owned database namespaces and migrations in `plugin_database_namespaces` and `plugin_migrations`. Hosted deployments that separate runtime and migration connections should set `DATABASE_MIGRATION_URL`; plugin namespace migration work uses the migration connection when present.

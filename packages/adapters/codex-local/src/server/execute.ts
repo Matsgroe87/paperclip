@@ -458,7 +458,8 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     config.promptTemplate,
     DEFAULT_PAPERCLIP_AGENT_PROMPT_TEMPLATE,
   );
-  const command = asString(config.command, "codex");
+  const configuredCodexCliPath = typeof process.env.CODEX_CLI_PATH === "string" ? process.env.CODEX_CLI_PATH.trim() : "";
+  const command = asString(config.command, configuredCodexCliPath || "codex");
   const model = asString(config.model, "");
 
   const workspaceContext = parseObject(context.paperclipWorkspace);

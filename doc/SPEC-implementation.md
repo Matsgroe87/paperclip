@@ -160,6 +160,7 @@ Invariant: every business record belongs to exactly one company.
 - `adapter_type` text; built-ins include `process`, `http`, `claude_local`, `codex_local`, `gemini_local`, `opencode_local`, `pi_local`, `cursor`, `hermes_local`, `hermes_gateway`, and `openclaw_gateway`
 - `adapter_config` jsonb not null
 - `runtime_config` jsonb not null default `{}`; may include Paperclip runtime policy such as `modelProfiles.cheap.adapterConfig` for an optional low-cost model lane that does not change the primary adapter config
+- `runtime_profile_id` uuid fk `runtime_profiles.id` null; profile updates propagate shared adapter/runtime fields to every bound agent
 - `default_environment_id` uuid fk `environments.id` null
 - `context_mode` enum: `thin | fat` default `thin`
 - `budget_monthly_cents` int not null default 0
@@ -174,6 +175,22 @@ Invariants:
 - agent and manager must be in same company
 - no cycles in reporting tree
 - `terminated` agents cannot be resumed
+
+## 7.2a `runtime_profiles`
+
+- `id` uuid pk
+- `company_id` uuid fk `companies.id` not null
+- `name` text not null, unique per company
+- `description` text null
+- `adapter_type` text not null
+- `adapter_config` jsonb not null default `{}`
+- `runtime_config` jsonb not null default `{}`
+
+Runtime profiles are reusable company-scoped execution configurations. They let
+operators update an adapter, model, startup command, or other shared runtime
+fields once and propagate the change to every bound agent. Agent-specific
+instructions, workspace paths, skills, and other fields not owned by the
+profile remain on the agent.
 
 ## 7.3 `agent_api_keys`
 
