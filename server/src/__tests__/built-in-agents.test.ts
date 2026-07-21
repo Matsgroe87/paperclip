@@ -163,6 +163,11 @@ describeEmbeddedPostgres("built-in agents", () => {
       defaultAdapterType: "claude_local",
       defaultAdapterConfig: { model: "claude-haiku-4-5" },
     });
+    const reflectionCoach = definitions.find((definition) => definition.key === "reflection-coach");
+    expect(reflectionCoach).toMatchObject({
+      defaultAdapterType: "codex_local",
+      defaultAdapterConfig: { extraArgs: ["--skip-git-repo-check"] },
+    });
     expect(summarizer?.defaultRuntimeConfig).toBeUndefined();
     expect(() => validateBuiltInAgentDefinitions([
       {
@@ -560,6 +565,7 @@ describeEmbeddedPostgres("built-in agents", () => {
       },
     });
     expect(state.agent?.adapterConfig).toMatchObject({
+      extraArgs: ["--skip-git-repo-check"],
       instructionsBundleMode: "managed",
       instructionsEntryFile: "AGENTS.md",
     });

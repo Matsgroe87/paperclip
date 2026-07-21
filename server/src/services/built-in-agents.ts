@@ -344,6 +344,10 @@ const DEFINITIONS = validateBuiltInAgentDefinitions([
     defaultStatus: "paused",
     defaultManager: "single_root_agent",
     allowedAdapterTypes: ["claude_local", "codex_local", "gemini_local", "opencode_local", "process"],
+    defaultAdapterType: "codex_local",
+    defaultAdapterConfig: {
+      extraArgs: ["--skip-git-repo-check"],
+    },
     defaultBudgetMonthlyCents: 0,
     bundle: {
       stockVersion: "2026-07-08",
