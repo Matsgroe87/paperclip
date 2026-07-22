@@ -37,6 +37,7 @@ import {
   refreshRemoteTrackingBaseRef,
   releaseRuntimeServicesForRun,
   resetRuntimeServicesForTests,
+  resolveRuntimeServiceLauncher,
   resolveWorkspaceRuntimeReadinessTimeoutSec,
   resolveShell,
   sanitizeRuntimeServiceBaseEnv,
@@ -4509,6 +4510,22 @@ describe("resolveShell (shell fallback)", () => {
     process.env.SHELL = "/definitely/missing/zsh";
     Object.defineProperty(process, "platform", { value: "linux" });
     expect(resolveShell()).toBe("/bin/sh");
+  });
+});
+
+describe("resolveRuntimeServiceLauncher", () => {
+  it("uses cmd.exe with Windows-native command arguments", () => {
+    expect(resolveRuntimeServiceLauncher("python -m http.server 4173", "win32")).toEqual({
+      command: "cmd.exe",
+      args: ["/d", "/s", "/c", "python -m http.server 4173"],
+    });
+  });
+
+  it("retains the login shell launcher on POSIX", () => {
+    expect(resolveRuntimeServiceLauncher("echo ready", "linux")).toEqual({
+      command: resolveShell(),
+      args: ["-lc", "echo ready"],
+    });
   });
 });
 
