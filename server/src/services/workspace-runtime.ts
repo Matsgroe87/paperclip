@@ -45,6 +45,17 @@ export function resolveShell(): string {
   return shell;
 }
 
+export function resolveRuntimeServiceLauncher(
+  command: string,
+  platform = process.platform,
+): { command: string; args: string[] } {
+  if (platform === "win32") {
+    return { command: "cmd.exe", args: ["/d", "/s", "/c", command] };
+  }
+
+  return { command: resolveShell(), args: ["-lc", command] };
+}
+
 export interface ExecutionWorkspaceInput {
   baseCwd: string;
   source: "project_primary" | "task_session" | "agent_home";
@@ -4013,8 +4024,8 @@ async function spawnLocalRuntimeService(input: StartLocalRuntimeServiceInput): P
     onLog: input.onLog,
   });
 
-  const shell = resolveShell();
-  const child = spawn(shell, ["-lc", command], {
+  const launcher = resolveRuntimeServiceLauncher(command);
+  const child = spawn(launcher.command, launcher.args, {
     cwd: serviceCwd,
     env,
     detached: process.platform !== "win32",
