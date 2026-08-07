@@ -55,11 +55,54 @@ export function resolveShell(): string {
   return shell;
 }
 
+function tokenizeWindowsCommand(command: string): string[] | null {
+  const trimmed = command.trim();
+  if (!trimmed) return null;
+
+  const args: string[] = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let index = 0; index < trimmed.length; index += 1) {
+    const char = trimmed[index]!;
+    if (char === '"') {
+      inQuotes = !inQuotes;
+      continue;
+    }
+    if (!inQuotes && /\s/.test(char)) {
+      if (current.length > 0) {
+        args.push(current);
+        current = "";
+      }
+      continue;
+    }
+    current += char;
+  }
+
+  if (inQuotes) return null;
+  if (current.length > 0) args.push(current);
+  return args.length > 0 ? args : null;
+}
+
+function looksLikeDirectWindowsExecutable(command: string): boolean {
+  if (/[|&<>]/.test(command)) return false;
+  const argv = tokenizeWindowsCommand(command);
+  if (!argv || argv.length === 0) return false;
+  const executable = argv[0]!;
+  return path.isAbsolute(executable) && executable.toLowerCase().endsWith(".exe");
+}
+
 export function resolveRuntimeServiceLauncher(
   command: string,
   platform = process.platform,
 ): { command: string; args: string[] } {
   if (platform === "win32") {
+    if (looksLikeDirectWindowsExecutable(command)) {
+      const argv = tokenizeWindowsCommand(command);
+      if (argv && argv.length > 0) {
+        return { command: argv[0]!, args: argv.slice(1) };
+      }
+    }
     return { command: "cmd.exe", args: ["/d", "/s", "/c", command] };
   }
 

@@ -4521,6 +4521,18 @@ describe("resolveRuntimeServiceLauncher", () => {
     });
   });
 
+  it("launches direct Windows executables without cmd.exe wrapping", () => {
+    expect(
+      resolveRuntimeServiceLauncher(
+        'C:\\Users\\matsg\\AppData\\Local\\Python\\bin\\python.exe -m http.server 4173 --bind 127.0.0.1 --directory build\\web',
+        "win32",
+      ),
+    ).toEqual({
+      command: "C:\\Users\\matsg\\AppData\\Local\\Python\\bin\\python.exe",
+      args: ["-m", "http.server", "4173", "--bind", "127.0.0.1", "--directory", "build\\web"],
+    });
+  });
+
   it("retains the login shell launcher on POSIX", () => {
     expect(resolveRuntimeServiceLauncher("echo ready", "linux")).toEqual({
       command: resolveShell(),
