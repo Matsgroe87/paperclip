@@ -3786,6 +3786,7 @@ export function issueRoutes(
       /** Used only to name the task in denial copy (plan §6). */
       identifier?: string | null;
     },
+    respondOnDenied = true,
   ) {
     if (req.actor.type !== "agent") return true;
     const actorAgentId = req.actor.agentId;
@@ -3810,9 +3811,58 @@ export function issueRoutes(
     }
     const boundaryDecision = await decideIssueAccess(req, issue, "issue:comment");
     if (!boundaryDecision.allowed) {
+      if (!respondOnDenied) return false;
       return denyIssueWrite(req, res, issue, issueWriteDenialCodeForDecision(boundaryDecision));
     }
     return boundaryDecision;
+  }
+
+  /**
+   * Allows an agent to publish immutable evidence upward through its own issue
+   * ancestry without granting it general mutation access to another issue.
+   * The source must be declared, be the active run's issue, and retain the
+   * caller's checkout lock. This is intentionally used only for creating
+   * comments and attachments; status, assignment, and deletion stay denied.
+   */
+  async function assertAgentAncestorEvidenceHandoffAllowed(
+    req: Request,
+    res: Response,
+    targetIssue: { id: string; companyId: string },
+    sourceIssueId: unknown,
+  ) {
+    if (req.actor.type !== "agent") return false;
+    const actorAgentId = req.actor.agentId;
+    const runId = req.actor.runId?.trim();
+    if (!actorAgentId || !runId || typeof sourceIssueId !== "string" || !z.string().uuid().safeParse(sourceIssueId).success) {
+      return false;
+    }
+    const run = await loadActorRunContext(req, targetIssue.companyId);
+    const context = run?.contextSnapshot && typeof run.contextSnapshot === "object"
+      ? run.contextSnapshot as Record<string, unknown>
+      : null;
+    if (context?.issueId !== sourceIssueId) return false;
+
+    const sourceIssue = await svc.getById(sourceIssueId);
+    if (
+      !sourceIssue ||
+      sourceIssue.companyId !== targetIssue.companyId ||
+      sourceIssue.assigneeAgentId !== actorAgentId ||
+      sourceIssue.status !== "in_progress"
+    ) return false;
+    try {
+      await svc.assertCheckoutOwner(sourceIssue.id, actorAgentId, runId);
+    } catch {
+      return false;
+    }
+
+    let cursor = sourceIssue;
+    for (let depth = 0; depth < 50 && cursor.parentId; depth += 1) {
+      if (cursor.parentId === targetIssue.id) return true;
+      const parent = await svc.getById(cursor.parentId);
+      if (!parent || parent.companyId !== targetIssue.companyId) return false;
+      cursor = parent;
+    }
+    return false;
   }
 
   function isIssueMentionGrantDecision(decision: true | Awaited<ReturnType<typeof decideIssueAccess>>) {
@@ -3876,8 +3926,9 @@ export function issueRoutes(
       /** Used only to name the task in denial copy (plan §6). */
       identifier?: string | null;
     },
-    options: { allowVisibleIssueWrite?: boolean } = {},
+    options: { allowVisibleIssueWrite?: boolean; respondOnDenied?: boolean } = {},
   ) {
+    const respondOnDenied = options.respondOnDenied ?? true;
     if (req.actor.type !== "agent") return true;
     const actorAgentId = req.actor.agentId;
     if (!actorAgentId) {
@@ -3909,6 +3960,7 @@ export function issueRoutes(
     }
     const boundaryDecision = await decideIssueAccess(req, issue, "issue:mutate");
     if (!boundaryDecision.allowed) {
+      if (!respondOnDenied) return false;
       return denyIssueWrite(req, res, issue, issueWriteDenialCodeForDecision(boundaryDecision));
     }
     if (issue.assigneeAgentId === null) {
@@ -10973,8 +11025,23 @@ export function issueRoutes(
       await denyIssueWrite(req, res, issue, "issue_write_attribution_spoof_rejected");
       return;
     }
-    const commentAccessDecision = await assertAgentIssueCommentAllowed(req, res, issue);
-    if (!commentAccessDecision) return;
+    let commentAccessDecision = await assertAgentIssueCommentAllowed(req, res, issue, false);
+    let ancestorEvidenceHandoff = false;
+    if (!commentAccessDecision) {
+      const handoffAllowed = await assertAgentAncestorEvidenceHandoffAllowed(
+        req,
+        res,
+        issue,
+        req.body.evidenceSourceIssueId,
+      );
+      if (!handoffAllowed) {
+        // Re-run so the denial emits the standard issue-write denial copy.
+        await assertAgentIssueCommentAllowed(req, res, issue);
+        return;
+      }
+      commentAccessDecision = true;
+      ancestorEvidenceHandoff = true;
+    }
     const commentAuthorizationReason = issueWriteAuthorizationReason(req, commentAccessDecision);
     if (!assertStructuredCommentFieldsAllowed(req, res, {
       presentation: req.body.presentation,
@@ -10992,6 +11059,10 @@ export function issueRoutes(
     const reopenRequested = req.body.reopen === true;
     const resumeRequested = req.body.resume === true;
     const interruptRequested = req.body.interrupt === true;
+    if (ancestorEvidenceHandoff && (reopenRequested || resumeRequested || interruptRequested)) {
+      res.status(403).json({ error: "Ancestor evidence handoff cannot change issue execution state" });
+      return;
+    }
     const isClosed = isClosedIssueStatus(issue.status);
     const isBlocked = issue.status === "blocked";
     const crossIssueCommentOnlyGrant =
@@ -11776,7 +11847,16 @@ export function issueRoutes(
       res.status(422).json({ error: "Issue does not belong to company" });
       return;
     }
-    if (!(await assertAgentIssueMutationAllowed(req, res, issue))) return;
+    const evidenceSourceIssueId = req.header("X-Paperclip-Evidence-Source-Issue-Id");
+    let attachmentAllowed = await assertAgentIssueMutationAllowed(req, res, issue, { respondOnDenied: false });
+    if (!attachmentAllowed) {
+      attachmentAllowed = await assertAgentAncestorEvidenceHandoffAllowed(req, res, issue, evidenceSourceIssueId);
+    }
+    if (!attachmentAllowed) {
+      // Re-run so the denial emits the standard issue-write denial copy.
+      await assertAgentIssueMutationAllowed(req, res, issue);
+      return;
+    }
     if (!(await assertDeliverableMutationAllowedByRunContext(req, res, issue))) return;
 
     const company = await companiesSvc.getById(companyId);
@@ -11813,6 +11893,10 @@ export function issueRoutes(
     const parsedMeta = createIssueAttachmentMetadataSchema.safeParse(req.body ?? {});
     if (!parsedMeta.success) {
       res.status(400).json({ error: "Invalid attachment metadata", details: parsedMeta.error.issues });
+      return;
+    }
+    if (parsedMeta.data.evidenceSourceIssueId && parsedMeta.data.evidenceSourceIssueId !== evidenceSourceIssueId) {
+      res.status(400).json({ error: "Attachment evidence source must match X-Paperclip-Evidence-Source-Issue-Id" });
       return;
     }
 
@@ -11853,6 +11937,7 @@ export function issueRoutes(
         originalFilename: attachment.originalFilename,
         contentType: attachment.contentType,
         byteSize: attachment.byteSize,
+        evidenceSourceIssueId: evidenceSourceIssueId ?? null,
       },
     });
 

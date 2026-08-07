@@ -668,6 +668,9 @@ export type IssueCommentMetadata = z.infer<typeof issueCommentMetadataSchema>;
 export const addIssueCommentSchema = z.object({
   body: multilineTextSchema.pipe(z.string().min(1)),
   onBehalfOfUserId: z.string().trim().min(1).optional().nullable(),
+  // Required for the narrowly scoped ancestor-evidence handoff capability.
+  // The server verifies that this is the active run's checked-out source issue.
+  evidenceSourceIssueId: z.string().uuid().optional(),
   authorType: issueCommentAuthorTypeSchema.optional(),
   presentation: issueCommentPresentationSchema.nullable().optional(),
   metadata: issueCommentMetadataSchema.nullable().optional(),
@@ -1312,6 +1315,8 @@ export type LinkIssueApproval = z.infer<typeof linkIssueApprovalSchema>;
 
 export const createIssueAttachmentMetadataSchema = z.object({
   issueCommentId: z.string().uuid().optional().nullable(),
+  // Multipart metadata is parsed before the route authorizes the handoff.
+  evidenceSourceIssueId: z.string().uuid().optional(),
 });
 
 export type CreateIssueAttachmentMetadata = z.infer<typeof createIssueAttachmentMetadataSchema>;

@@ -10,6 +10,7 @@ const ownerAgentId = "33333333-3333-4333-8333-333333333333";
 const peerAgentId = "44444444-4444-4444-8444-444444444444";
 const ownerRunId = "55555555-5555-4555-8555-555555555555";
 const recoveryActionId = "77777777-7777-4777-8777-777777777777";
+const evidenceSourceIssueId = "88888888-8888-4888-8888-888888888888";
 
 const mockIssueService = vi.hoisted(() => ({
   addComment: vi.fn(),
@@ -868,6 +869,37 @@ describe("agent issue mutation checkout ownership", () => {
     expect(res.status, JSON.stringify(res.body)).toBe(201);
     expect(mockIssueService.addComment).toHaveBeenCalled();
     expect(mockIssueService.update).not.toHaveBeenCalled();
+  });
+
+  it("allows a checked-out child run to hand off evidence to an ancestor comment", async () => {
+    const target = makeIssue({ id: issueId, parentId: null, assigneeAgentId: peerAgentId });
+    const source = makeIssue({
+      id: evidenceSourceIssueId,
+      parentId: issueId,
+      assigneeAgentId: ownerAgentId,
+      status: "in_progress",
+    });
+    mockIssueService.getById.mockImplementation(async (id: string) =>
+      id === evidenceSourceIssueId ? source : id === issueId ? target : null,
+    );
+    mockAccessService.decide.mockImplementation(async (input: { action: string }) => ({
+      allowed: input.action === "company_scope:read",
+      action: input.action,
+      reason: "deny_low_trust_boundary",
+      explanation: "Outside the source issue boundary.",
+    }));
+    mockIssueService.assertCheckoutOwner.mockResolvedValue({ adoptedFromRunId: null });
+
+    const res = await request(await createApp(
+      ownerActor(),
+      createRunContextDb({ issueId: evidenceSourceIssueId }),
+    ))
+      .post(`/api/issues/${issueId}/comments`)
+      .send({ body: "RC evidence attached from child run.", evidenceSourceIssueId });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(mockIssueService.assertCheckoutOwner).toHaveBeenCalledWith(evidenceSourceIssueId, ownerAgentId, ownerRunId);
+    expect(mockIssueService.addComment).toHaveBeenCalled();
   });
 
   it("rejects peer agents from listing comments when issue read is outside their boundary", async () => {
