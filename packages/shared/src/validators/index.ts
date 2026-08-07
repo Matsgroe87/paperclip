@@ -381,6 +381,12 @@ export {
   type UpdateProjectWorkspace,
   type ProjectExecutionWorkspacePolicy,
 } from "./project.js";
+export {
+  createRuntimeProfileSchema,
+  updateRuntimeProfileSchema,
+  type CreateRuntimeProfile,
+  type UpdateRuntimeProfile,
+} from "./runtime-profile.js";
 
 export {
   createDocumentAnnotationCommentSchema,
