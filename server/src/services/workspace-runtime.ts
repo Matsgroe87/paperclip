@@ -92,21 +92,27 @@ function looksLikeDirectWindowsExecutable(command: string): boolean {
   return path.isAbsolute(executable) && executable.toLowerCase().endsWith(".exe");
 }
 
+/**
+ * `verbatim` must be forwarded to `spawn` as `windowsVerbatimArguments`. Node
+ * otherwise escapes embedded quotes as `\"`, which cmd.exe does not understand,
+ * so a command like `node -e "…"` reaches the child with its quoting destroyed.
+ * The direct-executable path keeps normal argv quoting.
+ */
 export function resolveRuntimeServiceLauncher(
   command: string,
   platform = process.platform,
-): { command: string; args: string[] } {
+): { command: string; args: string[]; verbatim: boolean } {
   if (platform === "win32") {
     if (looksLikeDirectWindowsExecutable(command)) {
       const argv = tokenizeWindowsCommand(command);
       if (argv && argv.length > 0) {
-        return { command: argv[0]!, args: argv.slice(1) };
+        return { command: argv[0]!, args: argv.slice(1), verbatim: false };
       }
     }
-    return { command: "cmd.exe", args: ["/d", "/s", "/c", command] };
+    return { command: "cmd.exe", args: ["/d", "/s", "/c", command], verbatim: true };
   }
 
-  return { command: resolveShell(), args: ["-lc", command] };
+  return { command: resolveShell(), args: ["-lc", command], verbatim: false };
 }
 
 /**
@@ -4445,6 +4451,7 @@ async function spawnLocalRuntimeService(input: StartLocalRuntimeServiceInput): P
     env,
     detached: process.platform !== "win32",
     stdio: ["ignore", "pipe", "pipe"],
+    windowsVerbatimArguments: launcher.verbatim,
   });
   const spawnErrorPromise = new Promise<never>((_, reject) => {
     child.once("error", (err) => {

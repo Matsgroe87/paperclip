@@ -4518,6 +4518,7 @@ describe("resolveRuntimeServiceLauncher", () => {
     expect(resolveRuntimeServiceLauncher("python -m http.server 4173", "win32")).toEqual({
       command: "cmd.exe",
       args: ["/d", "/s", "/c", "python -m http.server 4173"],
+      verbatim: true,
     });
   });
 
@@ -4530,6 +4531,7 @@ describe("resolveRuntimeServiceLauncher", () => {
     ).toEqual({
       command: "C:\\Users\\matsg\\AppData\\Local\\Python\\bin\\python.exe",
       args: ["-m", "http.server", "4173", "--bind", "127.0.0.1", "--directory", "build\\web"],
+      verbatim: false,
     });
   });
 
@@ -4537,6 +4539,7 @@ describe("resolveRuntimeServiceLauncher", () => {
     expect(resolveRuntimeServiceLauncher("echo ready", "linux")).toEqual({
       command: resolveShell(),
       args: ["-lc", "echo ready"],
+      verbatim: false,
     });
   });
 });
