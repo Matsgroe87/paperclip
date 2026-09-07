@@ -314,6 +314,139 @@ describeEmbeddedPostgres("heartbeat bounded retry scheduling", () => {
       .toEqual({ status: "idle", errorReason: null });
   });
 
+  it("holds queued Claude work behind the instance-wide provider concurrency limit", async () => {
+    const companyId = randomUUID();
+    const runningAgentId = randomUUID();
+    const queuedAgentId = randomUUID();
+    const runningRunId = randomUUID();
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+      requireBoardApprovalForNewAgents: false,
+      defaultResponsibleUserId: "responsible-user",
+    });
+    await db.insert(agents).values([
+      {
+        id: runningAgentId,
+        companyId,
+        name: "Running Claude",
+        role: "engineer",
+        status: "running",
+        adapterType: "claude_local",
+        adapterConfig: {},
+        runtimeConfig: { heartbeat: { wakeOnDemand: true, maxConcurrentRuns: 1 } },
+        permissions: {},
+      },
+      {
+        id: queuedAgentId,
+        companyId,
+        name: "Queued Claude",
+        role: "engineer",
+        status: "idle",
+        adapterType: "claude_local",
+        adapterConfig: {},
+        runtimeConfig: { heartbeat: { wakeOnDemand: true, maxConcurrentRuns: 1 } },
+        permissions: {},
+      },
+    ]);
+    await db.insert(heartbeatRuns).values({
+      id: runningRunId,
+      companyId,
+      agentId: runningAgentId,
+      invocationSource: "on_demand",
+      triggerDetail: "manual",
+      status: "running",
+      startedAt: new Date(),
+      contextSnapshot: {},
+    });
+
+    const queuedRun = await heartbeat.wakeup(queuedAgentId, {
+      source: "on_demand",
+      triggerDetail: "manual",
+      reason: "provider_concurrency_test",
+    });
+
+    expect(queuedRun).not.toBeNull();
+    const persisted = await db
+      .select({ status: heartbeatRuns.status })
+      .from(heartbeatRuns)
+      .where(eq(heartbeatRuns.id, queuedRun!.id))
+      .then((rows) => rows[0] ?? null);
+    expect(persisted?.status).toBe("queued");
+  });
+
+  it("holds queued Claude work while the provider quota circuit is open", async () => {
+    const companyId = randomUUID();
+    const quotaAgentId = randomUUID();
+    const queuedAgentId = randomUUID();
+    const quotaRunId = randomUUID();
+    const retryNotBefore = new Date(Date.now() + 60 * 60 * 1000);
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+      requireBoardApprovalForNewAgents: false,
+      defaultResponsibleUserId: "responsible-user",
+    });
+    await db.insert(agents).values([
+      {
+        id: quotaAgentId,
+        companyId,
+        name: "Quota Claude",
+        role: "engineer",
+        status: "idle",
+        adapterType: "claude_local",
+        adapterConfig: {},
+        runtimeConfig: { heartbeat: { wakeOnDemand: true, maxConcurrentRuns: 1 } },
+        permissions: {},
+      },
+      {
+        id: queuedAgentId,
+        companyId,
+        name: "Waiting Claude",
+        role: "engineer",
+        status: "idle",
+        adapterType: "claude_local",
+        adapterConfig: {},
+        runtimeConfig: { heartbeat: { wakeOnDemand: true, maxConcurrentRuns: 1 } },
+        permissions: {},
+      },
+    ]);
+    await db.insert(heartbeatRuns).values({
+      id: quotaRunId,
+      companyId,
+      agentId: quotaAgentId,
+      invocationSource: "on_demand",
+      triggerDetail: "manual",
+      status: "failed",
+      error: "You've hit your session limit",
+      errorCode: "provider_quota",
+      resultJson: {
+        errorFamily: "provider_quota",
+        providerQuotaRetryNotBefore: retryNotBefore.toISOString(),
+      },
+      finishedAt: new Date(),
+      contextSnapshot: {},
+    });
+
+    const queuedRun = await heartbeat.wakeup(queuedAgentId, {
+      source: "on_demand",
+      triggerDetail: "manual",
+      reason: "provider_quota_test",
+    });
+
+    expect(queuedRun).not.toBeNull();
+    const persisted = await db
+      .select({ status: heartbeatRuns.status })
+      .from(heartbeatRuns)
+      .where(eq(heartbeatRuns.id, queuedRun!.id))
+      .then((rows) => rows[0] ?? null);
+    expect(persisted?.status).toBe("queued");
+  });
+
   async function seedMaxTurnFixture(input?: {
     companyId?: string;
     agentId?: string;

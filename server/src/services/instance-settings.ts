@@ -14,9 +14,12 @@ export type InstanceSettingsWriteDb = Pick<
 import {
   DEFAULT_FEEDBACK_DATA_SHARING_PREFERENCE,
   DEFAULT_BACKUP_RETENTION,
+  DEFAULT_EXECUTION_GOVERNANCE,
+  instanceExecutionGovernanceSettingsSchema,
   PAPERCLIP_CLOUD_MANAGED_BY,
   instanceGeneralSettingsSchema,
   type InstanceGeneralSettings,
+  type InstanceExecutionGovernanceSettings,
   instanceExperimentalSettingsSchema,
   type InstanceExperimentalSettings,
   type InstanceExperimentalSettingsWithManaged,
@@ -203,6 +206,7 @@ function normalizeGeneralSettings(raw: unknown): InstanceGeneralSettings {
       feedbackDataSharingPreference:
         parsed.data.feedbackDataSharingPreference ?? DEFAULT_FEEDBACK_DATA_SHARING_PREFERENCE,
       backupRetention: parsed.data.backupRetention ?? DEFAULT_BACKUP_RETENTION,
+      executionGovernance: parsed.data.executionGovernance ?? DEFAULT_EXECUTION_GOVERNANCE,
       // Absent => unrestricted; only carry through an explicit policy.
       ...(parsed.data.executionMode ? { executionMode: parsed.data.executionMode } : {}),
     };
@@ -212,7 +216,15 @@ function normalizeGeneralSettings(raw: unknown): InstanceGeneralSettings {
     keyboardShortcuts: false,
     feedbackDataSharingPreference: DEFAULT_FEEDBACK_DATA_SHARING_PREFERENCE,
     backupRetention: DEFAULT_BACKUP_RETENTION,
+    executionGovernance: DEFAULT_EXECUTION_GOVERNANCE,
   };
+}
+
+export function normalizeExecutionGovernanceSettings(
+  raw: unknown,
+): InstanceExecutionGovernanceSettings {
+  const parsed = instanceExecutionGovernanceSettingsSchema.safeParse(raw ?? {});
+  return parsed.success ? parsed.data : DEFAULT_EXECUTION_GOVERNANCE;
 }
 
 export function normalizeExperimentalSettings(raw: unknown): InstanceExperimentalSettings {

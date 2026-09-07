@@ -50,6 +50,29 @@ In agent runtime settings, configure heartbeat policy:
 - `wakeOnAssignment`: wake when assigned work
 - `wakeOnOnDemand`: allow ping-style on-demand wakeups
 - `wakeOnAutomation`: allow system automation wakeups
+- `maxConcurrentRuns`: per-agent concurrency cap. Keep this at `1` for local CLI
+  agents that share one provider account.
+- `maxDailyRuns`: optional per-agent UTC-day run cap. Omit the field for no
+  limit. The UI's `0` value clears the field.
+- `maxDailyTokens`: optional per-agent UTC-day input plus output token cap.
+  Cached input tokens are tracked separately and are not included in this cap.
+
+The instance General settings also contain provider execution governance:
+
+- `providerConcurrency`: instance-wide concurrency caps by provider. The
+  default for `anthropic` is `1` because local Claude CLIs commonly share one
+  subscription account.
+- `providerQuotaCircuitBreaker`: when enabled, a provider quota failure holds
+  all matching local runs until the recorded reset time.
+- `providerRetryJitterSec`: optional positive delay added after a provider reset
+  to spread a retry burst.
+- `providerDailyTokenLimits`: optional instance-wide input plus output token
+  caps by provider. A missing entry or `0` means unlimited.
+
+The provider gate is admission control. It keeps runs queued and does not
+cancel productive work that is already running. The settings are available
+through `GET|PATCH /api/instance/settings/general` and are persisted in the
+instance settings row.
 
 ## 3.3 Working directory and execution limits
 

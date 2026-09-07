@@ -1727,6 +1727,7 @@ export {
   WEEKLY_RETENTION_PRESETS,
   MONTHLY_RETENTION_PRESETS,
   DEFAULT_BACKUP_RETENTION,
+  DEFAULT_EXECUTION_GOVERNANCE,
   PAPERCLIP_CLOUD_MANAGED_BY,
 } from "./types/instance.js";
 
@@ -1763,7 +1764,9 @@ export {
 export {
   instanceSettingsSchema,
   instanceGeneralSettingsSchema,
+  instanceExecutionGovernanceSettingsSchema,
   patchInstanceGeneralSettingsSchema,
+  type InstanceExecutionGovernanceSettings,
   type PatchInstanceGeneralSettings,
   instanceExperimentalSettingsSchema,
   instanceExperimentalSettingsWithManagedSchema,

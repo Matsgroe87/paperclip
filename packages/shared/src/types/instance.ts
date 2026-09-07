@@ -16,6 +16,25 @@ export const DEFAULT_BACKUP_RETENTION: BackupRetentionPolicy = {
 };
 
 /**
+ * Conservative defaults for shared local provider accounts.
+ * Anthropic local CLI work is admitted one run at a time and quota failures
+ * open a circuit until the provider reset window.
+ */
+export const DEFAULT_EXECUTION_GOVERNANCE = {
+  providerConcurrency: { anthropic: 1 },
+  providerQuotaCircuitBreaker: true,
+  providerRetryJitterSec: 0,
+  providerDailyTokenLimits: {},
+} as const;
+
+export interface InstanceExecutionGovernanceSettings {
+  providerConcurrency: Record<string, number>;
+  providerQuotaCircuitBreaker: boolean;
+  providerRetryJitterSec: number;
+  providerDailyTokenLimits: Record<string, number>;
+}
+
+/**
  * Instance-wide execution policy.
  *
  * - `"any"` (default / absent): unrestricted — any environment driver (local,
@@ -33,6 +52,7 @@ export interface InstanceGeneralSettings {
   keyboardShortcuts: boolean;
   feedbackDataSharingPreference: FeedbackDataSharingPreference;
   backupRetention: BackupRetentionPolicy;
+  executionGovernance?: InstanceExecutionGovernanceSettings;
   /**
    * Execution policy. Absent/`"any"` = unrestricted; `"kubernetes"` forces the
    * Kubernetes sandbox provider and denies local/ssh execution.

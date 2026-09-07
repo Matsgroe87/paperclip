@@ -1825,6 +1825,30 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                   className={inputClass}
                 />
               </Field>
+              <Field label="Max runs per UTC day" hint={help.maxDailyRuns}>
+                <DraftNumberInput
+                  value={eff(
+                    "heartbeat",
+                    "maxDailyRuns",
+                    Number(heartbeat.maxDailyRuns ?? 0),
+                  )}
+                  onCommit={(v) => mark("heartbeat", "maxDailyRuns", v > 0 ? v : undefined)}
+                  immediate
+                  className={inputClass}
+                />
+              </Field>
+              <Field label="Max tokens per UTC day" hint={help.maxDailyTokens}>
+                <DraftNumberInput
+                  value={eff(
+                    "heartbeat",
+                    "maxDailyTokens",
+                    Number(heartbeat.maxDailyTokens ?? 0),
+                  )}
+                  onCommit={(v) => mark("heartbeat", "maxDailyTokens", v)}
+                  immediate
+                  className={inputClass}
+                />
+              </Field>
               <div className="rounded-md border border-border/70 px-3 py-2">
                 <ToggleField
                   label="Continue after max-turn stop"

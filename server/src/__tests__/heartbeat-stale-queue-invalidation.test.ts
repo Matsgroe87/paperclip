@@ -1122,6 +1122,54 @@ describeEmbeddedPostgres("heartbeat stale queued-run invalidation", () => {
     });
   });
 
+  it("skips wakes before queueing when per-agent daily token cap is reached", async () => {
+    const { companyId, agentId } = await seedCompanyAndAgent({
+      heartbeatConfig: {
+        maxDailyTokens: 100,
+      },
+    });
+    await db.insert(costEvents).values({
+      companyId,
+      agentId,
+      provider: "test",
+      biller: "test",
+      billingType: "metered_api",
+      model: "test-model",
+      inputTokens: 80,
+      outputTokens: 20,
+      costCents: 0,
+      occurredAt: new Date(),
+    });
+
+    const run = await heartbeat.wakeup(agentId, {
+      source: "on_demand",
+      triggerDetail: "manual",
+    });
+
+    expect(run).toBeNull();
+    expect(mockAdapterExecute).not.toHaveBeenCalled();
+
+    const [wakeup] = await db
+      .select({
+        status: agentWakeupRequests.status,
+        reason: agentWakeupRequests.reason,
+        payload: agentWakeupRequests.payload,
+      })
+      .from(agentWakeupRequests)
+      .where(eq(agentWakeupRequests.agentId, agentId));
+
+    expect(wakeup).toMatchObject({
+      status: "skipped",
+      reason: "heartbeat.daily_token_limit",
+    });
+    expect(wakeup?.payload).toMatchObject({
+      heartbeatSkip: {
+        observed: 100,
+        limit: 100,
+      },
+    });
+  });
+
   it("treats zero daily cost cap as a hard stop", async () => {
     const { agentId } = await seedCompanyAndAgent({
       heartbeatConfig: {

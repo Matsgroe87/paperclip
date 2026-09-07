@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { PatchInstanceGeneralSettings, BackupRetentionPolicy } from "@paperclipai/shared";
+import type {
+  BackupRetentionPolicy,
+  InstanceExecutionGovernanceSettings,
+  PatchInstanceGeneralSettings,
+} from "@paperclipai/shared";
 import {
   DAILY_RETENTION_PRESETS,
   WEEKLY_RETENTION_PRESETS,
@@ -12,6 +16,8 @@ import { healthApi } from "@/api/health";
 import { instanceSettingsApi } from "@/api/instanceSettings";
 import { ModeBadge } from "@/components/access/ModeBadge";
 import { Button } from "../components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
 import { ToggleSwitch } from "@/components/ui/toggle-switch";
@@ -79,6 +85,13 @@ export function InstanceGeneralSettings({ embedded = false }: { embedded?: boole
   const keyboardShortcuts = generalQuery.data?.keyboardShortcuts === true;
   const feedbackDataSharingPreference = generalQuery.data?.feedbackDataSharingPreference ?? "prompt";
   const backupRetention: BackupRetentionPolicy = generalQuery.data?.backupRetention ?? DEFAULT_BACKUP_RETENTION;
+  const executionGovernance: InstanceExecutionGovernanceSettings =
+    generalQuery.data?.executionGovernance ?? {
+      providerConcurrency: { anthropic: 1 },
+      providerQuotaCircuitBreaker: true,
+      providerRetryJitterSec: 0,
+      providerDailyTokenLimits: {},
+    };
   const hiddenSettings = new Set(healthQuery.data?.hiddenSettings ?? []);
   const showDeploymentStatus = !hiddenSettings.has("instance.general.deploymentStatus");
   const showCensorUsernameInLogs = !hiddenSettings.has("instance.general.censorUsernameInLogs");
@@ -121,6 +134,90 @@ export function InstanceGeneralSettings({ embedded = false }: { embedded?: boole
           {visibleActionError}
         </div>
       )}
+
+      <Card className="block p-5">
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-sm font-semibold">Agent execution governance</h2>
+            <p className="text-sm text-muted-foreground">
+              Hold shared Anthropic work when the account is rate-limited or out of session tokens.
+            </p>
+          </div>
+          <label className="flex items-center justify-between gap-4 text-sm">
+            <span>Quota circuit breaker</span>
+            <ToggleSwitch
+              checked={executionGovernance.providerQuotaCircuitBreaker}
+              onCheckedChange={(checked) =>
+                updateGeneralMutation.mutate({
+                  executionGovernance: { ...executionGovernance, providerQuotaCircuitBreaker: checked },
+                })}
+              disabled={updateGeneralMutation.isPending || signOutMutation.isPending}
+              aria-label="Toggle provider quota circuit breaker"
+            />
+          </label>
+          <div className="grid gap-3 md:grid-cols-3">
+            <label className="space-y-1 text-sm">
+              <span>Anthropic concurrent runs</span>
+              <Input
+                type="number"
+                min={1}
+                max={50}
+                value={executionGovernance.providerConcurrency.anthropic ?? 1}
+                onChange={(event) => {
+                  const value = Number.parseInt(event.target.value, 10);
+                  if (Number.isInteger(value) && value >= 1 && value <= 50) {
+                    updateGeneralMutation.mutate({
+                      executionGovernance: {
+                        ...executionGovernance,
+                        providerConcurrency: { ...executionGovernance.providerConcurrency, anthropic: value },
+                      },
+                    });
+                  }
+                }}
+              />
+            </label>
+            <label className="space-y-1 text-sm">
+              <span>Retry jitter seconds</span>
+              <Input
+                type="number"
+                min={0}
+                max={3600}
+                value={executionGovernance.providerRetryJitterSec}
+                onChange={(event) => {
+                  const value = Number.parseInt(event.target.value, 10);
+                  if (Number.isInteger(value) && value >= 0 && value <= 3600) {
+                    updateGeneralMutation.mutate({
+                      executionGovernance: { ...executionGovernance, providerRetryJitterSec: value },
+                    });
+                  }
+                }}
+              />
+            </label>
+            <label className="space-y-1 text-sm">
+              <span>Anthropic daily tokens</span>
+              <Input
+                type="number"
+                min={0}
+                value={executionGovernance.providerDailyTokenLimits.anthropic ?? 0}
+                onChange={(event) => {
+                  const value = Number.parseInt(event.target.value, 10);
+                  if (Number.isInteger(value) && value >= 0) {
+                    updateGeneralMutation.mutate({
+                      executionGovernance: {
+                        ...executionGovernance,
+                        providerDailyTokenLimits: {
+                          ...executionGovernance.providerDailyTokenLimits,
+                          anthropic: value,
+                        },
+                      },
+                    });
+                  }
+                }}
+              />
+            </label>
+          </div>
+        </div>
+      </Card>
 
       {showDeploymentStatus && (
       <section>

@@ -1218,12 +1218,21 @@ Per-agent schedule fields in `adapter_config`:
 - `enabled` boolean
 - `intervalSec` integer (minimum 30)
 - `maxConcurrentRuns` integer; new agents default to `20`; scheduler clamps configured values to `1..50`
+- `maxDailyRuns` optional UTC-day run cap
+- `maxDailyTokens` optional UTC-day input plus output token cap
 
 Scheduler must skip invocation when:
 
 - agent is paused/terminated
 - an existing run is active
 - hard budget limit has been hit
+
+Local CLI adapters that share one provider account also use instance-wide
+provider admission. The provider gate serializes slot claims, applies
+`providerConcurrency`, and keeps queued work queued while
+`providerQuotaCircuitBreaker` is open. `providerRetryJitterSec` spreads retries
+after a provider reset. The default Anthropic concurrency is one active local
+run.
 
 ## 12. Governance and Approval Flows
 
@@ -1270,6 +1279,11 @@ Board can at any time:
   - emit high-priority activity event
 
 Board may override by raising budget or explicitly resuming agent.
+
+Money-based budgets do not protect subscription quotas when a provider reports
+`billingType = subscription_included` and `costCents = 0`. Provider admission
+and token/run caps are separate hard-stop controls for subscription-backed
+local agents.
 
 ## 13.3 Cost Event Ingestion
 

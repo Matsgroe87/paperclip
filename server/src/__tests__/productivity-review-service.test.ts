@@ -210,6 +210,39 @@ describeEmbeddedPostgres("productivity review service", () => {
     expect(await listRefreshComments(reviews[0]!.id)).toHaveLength(0);
   });
 
+  it("does not create productivity reviews from provider quota retry noise alone", async () => {
+    const now = new Date("2026-04-28T12:00:00.000Z");
+    const seeded = await seedAssignedIssue();
+    const runs = Array.from({ length: DEFAULT_PRODUCTIVITY_REVIEW_NO_COMMENT_STREAK_RUNS }, (_, index) => {
+      const createdAt = new Date(now.getTime() - index * 60_000);
+      return {
+        id: randomUUID(),
+        companyId: seeded.companyId,
+        agentId: seeded.coderId,
+        status: "failed" as const,
+        errorCode: "provider_quota",
+        invocationSource: "assignment" as const,
+        triggerDetail: "system" as const,
+        startedAt: createdAt,
+        finishedAt: new Date(createdAt.getTime() + 30_000),
+        contextSnapshot: { issueId: seeded.issueId, taskId: seeded.issueId },
+        livenessState: "failed" as const,
+        createdAt,
+        updatedAt: createdAt,
+      };
+    });
+    await db.insert(heartbeatRuns).values(runs);
+
+    const result = await productivityReviewService(db).reconcileProductivityReviews({
+      now,
+      companyId: seeded.companyId,
+    });
+
+    expect(result.created).toBe(0);
+    expect(result.skipped).toBe(1);
+    expect(await listProductivityReviews(seeded.companyId)).toHaveLength(0);
+  });
+
   it("refreshes open productivity reviews only once per interval and caps refresh comments", async () => {
     const now = new Date("2026-04-28T12:00:00.000Z");
     const seeded = await seedAssignedIssue();

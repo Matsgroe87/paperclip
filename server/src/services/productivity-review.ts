@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, gte, inArray, isNull, notInArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNull, notInArray, or, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { clampIssueRequestDepth } from "@paperclipai/shared";
 import {
@@ -36,6 +36,11 @@ const ACTIVE_RUN_STATUSES = ["queued", "running", "scheduled_retry"] as const;
 const MAX_CANDIDATE_ISSUES = 250;
 const MAX_RUNS_FOR_STREAK = 100;
 const MAX_PARENT_WALK_DEPTH = 25;
+const INFRASTRUCTURE_ONLY_RUN_ERROR_CODES = new Set([
+  "provider_quota",
+  "claude_transient_upstream",
+  "codex_transient_upstream",
+]);
 export const PRODUCTIVITY_REVIEW_REFRESH_COMMENT_PREFIX = "Productivity review evidence refreshed.";
 
 type IssueRow = typeof issues.$inferSelect;
@@ -45,7 +50,7 @@ type HeartbeatRunRow = typeof heartbeatRuns.$inferSelect;
 // result_json/context_snapshot for up to MAX_RUNS_FOR_STREAK runs per issue.
 type ProductivityRunSample = Pick<
   HeartbeatRunRow,
-  "id" | "agentId" | "status" | "livenessState" | "createdAt" | "nextAction" | "usageJson"
+  "id" | "agentId" | "status" | "errorCode" | "livenessState" | "createdAt" | "nextAction" | "usageJson"
 >;
 type ProductivityReviewTrigger = "no_comment_streak" | "long_active_duration" | "high_churn";
 
@@ -143,6 +148,10 @@ function readPositiveInteger(value: number, fallback: number) {
 function coerceDate(value: Date | string | null | undefined) {
   if (!value) return null;
   return value instanceof Date ? value : new Date(value);
+}
+
+function isProductivityEligibleRun(run: Pick<HeartbeatRunRow, "errorCode">) {
+  return !run.errorCode || !INFRASTRUCTURE_ONLY_RUN_ERROR_CODES.has(run.errorCode);
 }
 
 function buildThresholds(overrides?: Partial<ProductivityReviewThresholds>): ProductivityReviewThresholds {
@@ -415,6 +424,10 @@ export function productivityReviewService(db: Db, deps?: { enqueueWakeup?: Enque
           eq(heartbeatRuns.companyId, companyId),
           eq(heartbeatRuns.agentId, agentId),
           issueRunScopeSql(issueId),
+          or(
+            isNull(heartbeatRuns.errorCode),
+            notInArray(heartbeatRuns.errorCode, [...INFRASTRUCTURE_ONLY_RUN_ERROR_CODES]),
+          ),
           sql`coalesce(${heartbeatRuns.startedAt}, ${heartbeatRuns.createdAt}) >= ${since.toISOString()}::timestamptz`,
         ),
       )
@@ -454,6 +467,7 @@ export function productivityReviewService(db: Db, deps?: { enqueueWakeup?: Enque
         id: heartbeatRuns.id,
         agentId: heartbeatRuns.agentId,
         status: heartbeatRuns.status,
+        errorCode: heartbeatRuns.errorCode,
         livenessState: heartbeatRuns.livenessState,
         createdAt: heartbeatRuns.createdAt,
         nextAction: heartbeatRuns.nextAction,
@@ -489,8 +503,11 @@ export function productivityReviewService(db: Db, deps?: { enqueueWakeup?: Enque
     }
 
     const terminalRuns = latestRuns.filter((run) =>
+      isProductivityEligibleRun(run) &&
       TERMINAL_RUN_STATUSES.includes(run.status as (typeof TERMINAL_RUN_STATUSES)[number]),
     );
+    const hasEligibleRunEvidence = latestRuns.some(isProductivityEligibleRun);
+    if (latestRuns.length > 0 && !hasEligibleRunEvidence) return null;
     let noCommentStreak = 0;
     for (const run of terminalRuns) {
       if (commentRunIds.has(run.id)) break;

@@ -108,6 +108,51 @@ export function resolveShell(): string {
   return shell;
 }
 
+function tokenizeWindowsCommand(command: string): string[] | null {
+  const trimmed = command.trim();
+  if (!trimmed) return null;
+  const args: string[] = [];
+  let current = "";
+  let inQuotes = false;
+  for (const char of trimmed) {
+    if (char === '"') {
+      inQuotes = !inQuotes;
+      continue;
+    }
+    if (!inQuotes && /\s/.test(char)) {
+      if (current) {
+        args.push(current);
+        current = "";
+      }
+      continue;
+    }
+    current += char;
+  }
+  if (inQuotes) return null;
+  if (current) args.push(current);
+  return args.length > 0 ? args : null;
+}
+
+function looksLikeDirectWindowsExecutable(command: string): boolean {
+  if (/[|&<>]/.test(command)) return false;
+  const argv = tokenizeWindowsCommand(command);
+  return Boolean(argv?.[0] && path.isAbsolute(argv[0]) && argv[0].toLowerCase().endsWith(".exe"));
+}
+
+export function resolveRuntimeServiceLauncher(
+  command: string,
+  platform = process.platform,
+): { command: string; args: string[]; verbatim: boolean } {
+  if (platform === "win32") {
+    if (looksLikeDirectWindowsExecutable(command)) {
+      const argv = tokenizeWindowsCommand(command);
+      if (argv) return { command: argv[0]!, args: argv.slice(1), verbatim: false };
+    }
+    return { command: "cmd.exe", args: ["/d", "/s", "/c", command], verbatim: true };
+  }
+  return { command: resolveShell(), args: ["-lc", command], verbatim: false };
+}
+
 /**
  * A read-only referenced (mentioned) project workspace carried alongside the anchor. Additive and
  * backward-compatible: it defaults to an empty array. Additional workspaces never get git-worktree
@@ -547,6 +592,16 @@ type WorkspaceLinkMismatch = {
   actualPath: string | null;
 };
 
+function isSymlinkPrivilegeError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: string; message?: string };
+  return (
+    candidate.code === "EPERM" ||
+    /privilege required/i.test(candidate.message ?? "") ||
+    /operation not permitted/i.test(candidate.message ?? "")
+  );
+}
+
 function readJsonFile(filePath: string): Record<string, unknown> {
   return JSON.parse(readFileSync(filePath, "utf8")) as Record<string, unknown>;
 }
@@ -663,7 +718,14 @@ export async function ensureServerWorkspaceLinksCurrent(
     const linkPath = path.join(workspaceRoot, "server", "node_modules", ...mismatch.packageName.split("/"));
     await fs.mkdir(path.dirname(linkPath), { recursive: true });
     await fs.rm(linkPath, { recursive: true, force: true });
-    await fs.symlink(mismatch.expectedPath, linkPath);
+    try {
+      await fs.symlink(mismatch.expectedPath, linkPath);
+    } catch (error) {
+      if (!isSymlinkPrivilegeError(error)) throw error;
+      // Windows allows directory junctions without the Developer Mode or
+      // SeCreateSymbolicLinkPrivilege requirement that blocks normal symlinks.
+      await fs.symlink(mismatch.expectedPath, linkPath, "junction");
+    }
   }
 
   const remainingMismatches = findServerWorkspaceLinkMismatches(workspaceRoot);
@@ -6380,14 +6442,15 @@ async function spawnLocalRuntimeService(input: StartLocalRuntimeServiceInput): P
     throw error;
   }
 
-  const shell = resolveShell();
+  const launcher = resolveRuntimeServiceLauncher(command);
   const serviceLog = await openLocalServiceLogFile(serviceKey);
   let child: ChildProcess;
   try {
-    child = spawn(shell, ["-lc", command], {
+    child = spawn(launcher.command, launcher.args, {
       cwd: serviceCwd,
       env,
       detached: process.platform !== "win32",
+      windowsVerbatimArguments: launcher.verbatim,
       // The service receives duplicate append-only file descriptors. Closing
       // Paperclip (or this parent handle below) cannot strand a request logger
       // on an orphaned socketpair during startup reconciliation.
