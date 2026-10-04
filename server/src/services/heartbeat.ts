@@ -16814,6 +16814,7 @@ export function heartbeatService(
           heartbeat.dailySpendCentsLimit ??
           heartbeat.dailyBudgetCents,
       ),
+      maxDailyTokens: normalizeOptionalNonNegativeInteger(heartbeat.maxDailyTokens),
     };
   }
 
@@ -16884,6 +16885,24 @@ export function heartbeatService(
           observed,
           limit: policy.maxDailyRuns,
         };
+      }
+    }
+
+    if (checkCostCap && policy.maxDailyTokens !== null && policy.maxDailyTokens > 0) {
+      const [row] = await client
+        .select({
+          total: sql<number>`coalesce(sum(${costEvents.inputTokens} + ${costEvents.outputTokens})::bigint, 0)`,
+        })
+        .from(costEvents)
+        .where(and(
+          eq(costEvents.companyId, agent.companyId),
+          eq(costEvents.agentId, agent.id),
+          gte(costEvents.occurredAt, start),
+          lt(costEvents.occurredAt, end),
+        ));
+      const observed = Number(row?.total ?? 0);
+      if (observed >= policy.maxDailyTokens) {
+        return { reason: "heartbeat.daily_token_limit", observed, limit: policy.maxDailyTokens };
       }
     }
 
