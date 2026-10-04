@@ -104,17 +104,18 @@ interface EmbeddedEvalReport {
     startedAt: string;
     finishedAt: string;
     durationMs: number | null;
-    initialRevision: number;
-    finalRevision: number;
+    initialRevision: number | null;
+    finalRevision: number | null;
+    finalStateSummary?: string;
     usage: {
       agentTurns: number;
       providerRequests: number | null;
-      inputTokens: number;
-      outputTokens: number;
-      cachedInputTokens: number;
-      reasoningTokens: number;
+      inputTokens?: number;
+      outputTokens?: number;
+      cachedInputTokens?: number;
+      reasoningTokens?: number;
       providerReportedCostNanodollars?: number;
-      estimatedCostNanodollars: number;
+      estimatedCostNanodollars?: number;
       pricingVersion: string;
     } | null;
   };
@@ -1408,7 +1409,7 @@ export function App() {
                 {embeddedEval !== null ? (
                   <div className="pit-eval-boundary" data-phase="post-run">
                     <strong>Post-run state</strong>
-                    <span>{embeddedEval.publication ? "Company-state details withheld from public replay" : `Final mock control-plane revision ${embeddedEval.run.finalRevision}`}</span>
+                    <span>{embeddedEval.publication ? "Company-state details withheld from public replay" : embeddedEval.run.finalStateSummary ?? `Final mock control-plane revision ${embeddedEval.run.finalRevision}`}</span>
                     <EvalAssertions assertions={embeddedEval.checks.filter((check) => check.anchor.kind === "run")} />
                   </div>
                 ) : null}

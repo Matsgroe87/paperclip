@@ -30,7 +30,7 @@ import type {
   IssueAssigneeAdapterOverrides,
   IssueAttachment,
   IssueThreadInteraction,
-  CreateIssueThreadInteraction,
+  CreateIssueThreadInteractionInput,
   Approval,
   PluginManagedAgentResolution,
   PluginManagedProjectResolution,
@@ -662,8 +662,21 @@ export interface PluginEnvironmentResumeLeaseParams extends PluginEnvironmentDri
 }
 
 export interface PluginEnvironmentReleaseLeaseParams extends PluginEnvironmentDriverBaseParams {
+  /** Stop the exact allocation while preserving its files, regardless of its
+   * ordinary release policy. A failed stop must throw, never fall back to delete. */
+  resourceDisposition?: "stop_and_retain";
+  /** Explicit operator cancellation: terminate active work instead of waiting
+   * for command/sync activity to drain. Still requires a provider receipt. */
+  cancelActiveWork?: boolean;
   providerLeaseId: string | null;
   leaseMetadata?: Record<string, unknown>;
+}
+
+/** Returned only after the provider confirms that execution has ended. A queued
+ * stop request or successful local cleanup is not a termination receipt. */
+export interface PluginEnvironmentTerminationReceipt {
+  providerLeaseId: string;
+  state: "stopped" | "destroyed";
 }
 
 export interface PluginEnvironmentDestroyLeaseParams extends PluginEnvironmentReleaseLeaseParams {}
@@ -1363,11 +1376,15 @@ export interface HostToWorkerMethods {
   ];
   environmentReleaseLease: [
     params: PluginEnvironmentReleaseLeaseParams,
-    result: void,
+    result: PluginEnvironmentTerminationReceipt | void,
+  ];
+  environmentStopLease: [
+    params: PluginEnvironmentReleaseLeaseParams,
+    result: PluginEnvironmentTerminationReceipt,
   ];
   environmentDestroyLease: [
     params: PluginEnvironmentDestroyLeaseParams,
-    result: void,
+    result: PluginEnvironmentTerminationReceipt | void,
   ];
   environmentRealizeWorkspace: [
     params: PluginEnvironmentRealizeWorkspaceParams,
@@ -1468,6 +1485,7 @@ export const HOST_TO_WORKER_OPTIONAL_METHODS: readonly HostToWorkerMethodName[] 
   "environmentAcquireLease",
   "environmentResumeLease",
   "environmentReleaseLease",
+  "environmentStopLease",
   "environmentDestroyLease",
   "environmentRealizeWorkspace",
   "environmentExecute",
@@ -1985,7 +2003,7 @@ export interface WorkerToHostMethods {
     params: {
       issueId: string;
       companyId: string;
-      interaction: CreateIssueThreadInteraction;
+      interaction: CreateIssueThreadInteractionInput;
       authorAgentId?: string | null;
     },
     result: IssueThreadInteraction,

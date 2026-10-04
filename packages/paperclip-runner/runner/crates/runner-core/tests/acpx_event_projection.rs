@@ -23,6 +23,24 @@ fn project(event: AcpxProviderStateEvent) -> Vec<NormalizedProviderEvent> {
     project_acpx_state_event(&context(), &event).unwrap()
 }
 
+fn canonical_request_branch(request_kind: &str, request_type: &str) -> Value {
+    let schema: Value = serde_json::from_str(include_str!(
+        "../../../../protocol/schemas/request.schema.json"
+    ))
+    .unwrap();
+    schema["oneOf"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|branch| {
+            branch["properties"]["schema"]["const"] == "paperclip.runtime_request.v2"
+                && branch["properties"]["requestKind"]["const"] == request_kind
+                && branch["properties"]["type"]["const"] == request_type
+        })
+        .expect("canonical v2 request branch")
+        .clone()
+}
+
 fn reduced_semantic_result(
     call_id: &str,
     operation_id: &str,
@@ -76,6 +94,23 @@ fn projects_authorized_tools_with_exact_durable_correlation() {
     assert!(events[0].payload["semantic_tool"]["content"]["digest"]
         .as_str()
         .is_some_and(|value| value.starts_with("sha256:")));
+}
+
+#[test]
+fn projects_reserved_completion_tool_input_for_server_feedback_roundtrip() {
+    let events = project(AcpxProviderStateEvent::ToolCall {
+        call_id: "finish-1".to_owned(),
+        operation_id: "paperclip_finish".to_owned(),
+        input: json!({"reportedWorkDisposition":"needs_review"}),
+    });
+
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].event_type, "semantic_tool.input");
+    assert_eq!(
+        events[0].payload["semantic_tool"]["operationId"],
+        "paperclip_finish"
+    );
+    assert_eq!(events[0].payload["semantic_tool"]["callId"], "finish-1");
 }
 
 #[test]
@@ -288,7 +323,10 @@ fn projects_assistant_terminal_and_diagnostic_events_fail_closed() {
             "text":"Done",
         }),
     }));
-    assert_eq!(streamed[0].payload["itemId"], "item-1");
+    assert!(streamed[0].payload["itemId"]
+        .as_str()
+        .unwrap()
+        .starts_with("acpx-assistant-"));
     assert_eq!(
         streamed[0].payload["providerItemId"],
         "opaque-provider-message"
@@ -299,7 +337,10 @@ fn projects_assistant_terminal_and_diagnostic_events_fail_closed() {
         text: "Done".to_owned(),
     });
     assert_eq!(assistant[0].event_type, "item.completed");
-    assert_eq!(assistant[0].payload["itemId"], "item-1");
+    assert_eq!(
+        assistant[0].payload["itemId"],
+        streamed[0].payload["itemId"]
+    );
     assert_eq!(assistant[0].payload["channel"], "final");
 
     for (status, expected) in [
@@ -343,7 +384,32 @@ fn projects_assistant_terminal_and_diagnostic_events_fail_closed() {
     assert!(project_acpx_state_event(&context(), &permission)
         .unwrap_err()
         .to_string()
-        .contains("pinned runner policy"));
+        .contains("omitted its choices"));
+}
+
+#[test]
+fn projects_only_the_permission_choices_offered_by_the_provider() {
+    let events = project(AcpxProviderStateEvent::PermissionRequest {
+        request_id: "permission-1".to_owned(),
+        kind: "write".to_owned(),
+        title: "Edit source".to_owned(),
+        details: json!({"choices":[{"key":"accept","label":"Allow once"},{"key":"cancel","label":"Cancel"}]}),
+    });
+    assert_eq!(events[0].event_type, "runtime_request.created");
+    let schema = canonical_request_branch("permission_approval", "permission");
+    let validator = jsonschema::validator_for(&schema).unwrap();
+    assert!(validator.is_valid(&events[0].payload["request"]));
+    assert_eq!(
+        events[0].payload["request"]["requestKind"],
+        "permission_approval"
+    );
+    assert_eq!(
+        events[0].payload["request"]["choices"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
 }
 
 #[test]
@@ -483,11 +549,7 @@ fn deterministically_projects_bounded_upstream_request_ids() {
 
 #[test]
 fn runtime_request_projection_preserves_durable_identity_boundaries() {
-    let canonical_request_schema: Value = serde_json::from_str(include_str!(
-        "../../../../protocol/schemas/request.schema.json"
-    ))
-    .unwrap();
-    let mut runtime_request_schema = canonical_request_schema["oneOf"][0].clone();
+    let mut runtime_request_schema = canonical_request_branch("runtime", "input");
     // This test owns identity projection. The question-set validator has its
     // own coverage, so replace its remote reference with an unconstrained
     // local schema before compiling the canonical runtime-request branch.
@@ -551,4 +613,25 @@ fn runtime_request_projection_preserves_durable_identity_boundaries() {
     .unwrap();
     let semantic_validator = jsonschema::validator_for(&semantic_schema).unwrap();
     assert!(semantic_validator.is_valid(&semantic[0].payload["semantic_tool"]));
+}
+
+#[test]
+fn recovery_preserves_the_preceding_provider_turn_answer() {
+    let first = project(AcpxProviderStateEvent::AssistantMessage {
+        turn_id: "turn-1".to_owned(),
+        text: "Useful answer".to_owned(),
+    });
+    let mut recovery = context();
+    recovery.provider_turn_id = Some("recovery-turn".to_owned());
+    let second = project_acpx_state_event(
+        &recovery,
+        &AcpxProviderStateEvent::AssistantMessage {
+            turn_id: "recovery-turn".to_owned(),
+            text: "Recovery update".to_owned(),
+        },
+    )
+    .unwrap();
+    assert_ne!(first[0].payload["itemId"], second[0].payload["itemId"]);
+    assert_eq!(first[0].payload["text"], "Useful answer");
+    assert_eq!(second[0].payload["text"], "Recovery update");
 }

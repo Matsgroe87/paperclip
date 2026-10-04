@@ -31,6 +31,9 @@ export type {
   NativeCodexApprovalPolicy,
   NativeExecutionInput,
   NativeExecutionInputV4,
+  NativeExecutionInputV5,
+  NativeCompletionSource,
+  NativeCompletionSources,
   NativeInteractionResponseEnvelope,
   NativeOpenCodePermissionMode,
   NativePlanningContext,
@@ -40,6 +43,7 @@ export type {
   NativeRuntimeContextSnapshot,
   NativeSession,
   NativeSessionBackend,
+  NativeSessionGoalControl,
   OpenControlPlaneRunInput,
   PersistedNativeSession,
   PrpEvent,
@@ -67,6 +71,14 @@ const sourceUrl = new URL(
 const runner = (await import(sourceUrl.href)) as RunnerModule;
 
 export const DurablePrpControlPlane = runner.DurablePrpControlPlane;
+export const runnerCodexDynamicToolsFit = runner.runnerCodexDynamicToolsFit;
+export const inspectWarmRunTransition = runner.inspectWarmRunTransition;
+export const readRunnerdArtifactBinding = runner.readRunnerdArtifactBinding;
+export const NativeSessionCleanupQuarantinedError =
+  runner.NativeSessionCleanupQuarantinedError;
+export const NativeSessionProtocolIntegrityError =
+  runner.NativeSessionProtocolIntegrityError;
+export const SemanticToolOutcomeUnknownError = runner.SemanticToolOutcomeUnknownError;
 export const PaperclipSemanticDispatcher = runner.PaperclipSemanticDispatcher;
 export const CAPABILITY_SEMANTIC_TOOL_CATALOG =
   runner.CAPABILITY_SEMANTIC_TOOL_CATALOG;
@@ -81,6 +93,7 @@ export const acpxRuntimeSessionDirectoryName =
 export const canonicalNativeRuntimeContextDigest =
   runner.canonicalNativeRuntimeContextDigest;
 export const createNativeSessionBackend = runner.createNativeSessionBackend;
+export const describeRunnerdNativeSessionBackend = runner.describeRunnerdNativeSessionBackend;
 export const createPaperclipRunnerAuthorizedToolSet =
   runner.createPaperclipRunnerAuthorizedToolSet;
 export const createRunnerdCodexTransport: (
@@ -90,6 +103,14 @@ export const createRunnerdCodexTransport: (
 export const defaultCapabilityRunnerdBinary =
   runner.defaultCapabilityRunnerdBinary;
 export const executeNativeSession = runner.executeNativeSession;
+export const applyNativeSessionGoalControl =
+  runner.applyNativeSessionGoalControl;
+export const completeRetainedNativeSessionCleanup = runner.completeRetainedNativeSessionCleanup;
+export const settleRetainedRunnerdSession = runner.settleRetainedRunnerdSession;
+export const retainedRunnerdMaintenanceIsIdle =
+  runner.retainedRunnerdMaintenanceIsIdle;
+export const drainRetainedRunnerdMaintenanceOperations =
+  runner.drainRetainedRunnerdMaintenanceOperations;
 export const nativeRuntimePromptDigest = runner.nativeRuntimePromptDigest;
 export const normalizePrpResultSignals = runner.normalizePrpResultSignals;
 export const parseCodexTurnDiff = runner.parseCodexTurnDiff;
@@ -105,3 +126,8 @@ export const resolveSourceCodexHome = runner.resolveSourceCodexHome;
 export const validatePrpEvent = runner.validatePrpEvent;
 export const validatePrpStructuredRunResult =
   runner.validatePrpStructuredRunResult;
+
+export const NativeProviderTerminalFailure = runner.NativeProviderTerminalFailure;
+
+export const completeTerminatedRemoteNativeSessionCleanup = runner.completeTerminatedRemoteNativeSessionCleanup;
+export const completeTerminatedLocalNativeSessionCleanup = runner.completeTerminatedLocalNativeSessionCleanup;
