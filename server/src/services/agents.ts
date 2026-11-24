@@ -28,6 +28,7 @@ export function agentService(db: Db, budgetHooks: BudgetServiceHooks = {}) {
     normalizeAgentRows,
     listCompanyAgentRows,
     hydrateAgentSpend,
+    attachRuntimeProfiles,
     getById
   } = agentRecordQueries(db);
   const updateAgent = (...args: Parameters<ReturnType<typeof createAgentLifecycle>["updateConfiguration"]>) =>
@@ -39,7 +40,7 @@ export function agentService(db: Db, budgetHooks: BudgetServiceHooks = {}) {
         ? allCompanyRows
         : allCompanyRows.filter((row) => row.status !== "terminated");
       const hydrated = await hydrateAgentSpend(rows);
-      return normalizeAgentRows(hydrated, allCompanyRows);
+      return attachRuntimeProfiles(normalizeAgentRows(hydrated, allCompanyRows));
     },
 
     getById,

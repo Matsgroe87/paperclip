@@ -13,6 +13,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { companies } from "./companies.js";
 import { environments } from "./environments.js";
+import { runtimeProfiles } from "./runtime_profiles.js";
 
 export const agents = pgTable(
   "agents",
@@ -39,6 +40,7 @@ export const agents = pgTable(
     adapterType: text("adapter_type").notNull().default("process"),
     adapterConfig: jsonb("adapter_config").$type<Record<string, unknown>>().notNull().default({}),
     runtimeConfig: jsonb("runtime_config").$type<Record<string, unknown>>().notNull().default({}),
+    runtimeProfileId: uuid("runtime_profile_id").references(() => runtimeProfiles.id, { onDelete: "set null" }),
     defaultEnvironmentId: uuid("default_environment_id").references(() => environments.id, { onDelete: "set null" }),
     budgetMonthlyCents: integer("budget_monthly_cents").notNull().default(0),
     spendMonthUtc: text("spend_month_utc"),
@@ -59,5 +61,6 @@ export const agents = pgTable(
     companyStatusIdx: index("agents_company_status_idx").on(table.companyId, table.status),
     companyReportsToIdx: index("agents_company_reports_to_idx").on(table.companyId, table.reportsTo),
     companyDefaultEnvironmentIdx: index("agents_company_default_environment_idx").on(table.companyId, table.defaultEnvironmentId),
+    companyRuntimeProfileIdx: index("agents_company_runtime_profile_idx").on(table.companyId, table.runtimeProfileId),
   }),
 );

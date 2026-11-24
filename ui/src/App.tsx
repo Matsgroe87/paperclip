@@ -74,6 +74,7 @@ const BootstrapSetupUxLab = lazy(() => import("./pages/BootstrapSetupUxLab").the
 const ResponsibleUserDenialUxLab = lazy(() => import("./pages/ResponsibleUserDenialUxLab").then((module) => ({ default: module.ResponsibleUserDenialUxLab })));
 const CrossIssueCollaborationUxLab = lazy(() => import("./pages/CrossIssueCollaborationUxLab").then((module) => ({ default: module.CrossIssueCollaborationUxLab })));
 const Agents = lazy(() => import("./pages/Agents").then((module) => ({ default: module.Agents })));
+const RuntimeProfiles = lazy(() => import("./pages/RuntimeProfiles").then((module) => ({ default: module.RuntimeProfiles })));
 const Cases = lazy(() => import("./pages/Cases").then((module) => ({ default: module.Cases })));
 const CaseDetail = lazy(() => import("./pages/CaseDetail").then((module) => ({ default: module.CaseDetail })));
 const Dashboard = lazy(() => import("./pages/Dashboard").then((module) => ({ default: module.Dashboard })));
@@ -172,6 +173,7 @@ function boardRoutes(streamlinedUiEnabled: boolean, combinedInboxTasksEnabled: b
       <Route path="onboarding" element={<OnboardingRoutePage />} />
       <Route path="companies" element={<Companies />} />
       <Route path="company/settings" element={<CompanySettings />} />
+      <Route path="company/settings/runtime-profiles" element={<RuntimeProfiles />} />
       <Route path="company/settings/connections" element={<CompanyConnections />} />
       <Route path="company/settings/environments" element={<Navigate to="/company/settings/instance/environments" replace />} />
       <Route path="company/settings/cloud-upstream" element={<Navigate to="/company/export" replace />} />

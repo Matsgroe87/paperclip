@@ -53,6 +53,7 @@ import {
   resolveWorkspaceRuntimeReadinessTimeoutSec,
   resolveShell,
   runWorkspaceJobForControl,
+  resolveRuntimeServiceLauncher,
   sanitizeRuntimeServiceBaseEnv,
   setWorkspaceRuntimeExposureDepsForTests,
   startRuntimeServicesForWorkspaceControl,
@@ -97,6 +98,33 @@ const RUNTIME_OWNED_GIT_BRANCH_METADATA = {
 } as const;
 
 const execFileAsync = promisify(execFile);
+
+function isWindowsSymlinkPrivilegeError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: string; message?: string };
+  return (
+    candidate.code === "EPERM" ||
+    /privilege required/i.test(candidate.message ?? "") ||
+    /operation not permitted/i.test(candidate.message ?? "")
+  );
+}
+
+async function createTestLink(
+  target: string,
+  linkPath: string,
+  type: "file" | "dir" = "file",
+) {
+  try {
+    await fs.symlink(target, linkPath, type);
+  } catch (error) {
+    if (!isWindowsSymlinkPrivilegeError(error)) throw error;
+    if (type === "dir") {
+      await fs.symlink(target, linkPath, "junction");
+      return;
+    }
+    await fs.copyFile(target, linkPath);
+  }
+}
 
 function stableStringifyForTest(value: unknown): string {
   if (Array.isArray(value)) {
@@ -725,7 +753,7 @@ describe("ensureServerWorkspaceLinksCurrent", () => {
       JSON.stringify({ name: "@paperclipai/db" }),
       "utf8",
     );
-    await fs.symlink(stalePackageDir, path.join(serverNodeModulesScopeDir, "db"));
+    await createTestLink(stalePackageDir, path.join(serverNodeModulesScopeDir, "db"), "dir");
 
     await ensureServerWorkspaceLinksCurrent(path.join(repoRoot, "server"));
     expect(await fs.realpath(path.join(serverNodeModulesScopeDir, "db"))).toBe(await fs.realpath(expectedPackageDir));
@@ -756,7 +784,7 @@ describe("ensureServerWorkspaceLinksCurrent", () => {
       JSON.stringify({ name: "@paperclipai/db" }),
       "utf8",
     );
-    await fs.symlink(expectedPackageDir, path.join(serverNodeModulesScopeDir, "db"));
+    await createTestLink(expectedPackageDir, path.join(serverNodeModulesScopeDir, "db"), "dir");
 
     await ensureServerWorkspaceLinksCurrent(path.join(repoRoot, "server"));
   });
@@ -794,7 +822,7 @@ describe("ensureServerWorkspaceLinksCurrent", () => {
       JSON.stringify({ name: "@paperclipai/db" }),
       "utf8",
     );
-    await fs.symlink(stalePackageDir, path.join(serverNodeModulesScopeDir, "db"));
+    await createTestLink(stalePackageDir, path.join(serverNodeModulesScopeDir, "db"), "dir");
 
     await ensureServerWorkspaceLinksCurrent(path.join(repoRoot, "server"));
     expect(await fs.realpath(path.join(serverNodeModulesScopeDir, "db"))).toBe(await fs.realpath(stalePackageDir));
@@ -2008,7 +2036,7 @@ process.stderr.write(${JSON.stringify(stderr)}, () => { process.exitCode = ${cod
     delete process.env.PAPERCLIP_CONFIG;
     // Keep this server-side fixture on provision-worktree.sh's config writer path;
     // CLI/database seeding is covered by the CLI worktree tests.
-    await fs.symlink(process.execPath, path.join(isolatedBin, "node"));
+    await createTestLink(process.execPath, path.join(isolatedBin, "node"));
     process.env.PATH = `${isolatedBin}${path.delimiter}/usr/bin${path.delimiter}/bin`;
 
     await fs.mkdir(sharedConfigDir, { recursive: true });
@@ -2953,7 +2981,7 @@ process.stderr.write(${JSON.stringify(stderr)}, () => { process.exitCode = ${cod
     await fs.mkdir(realWorktreeRoot, { recursive: true });
     await runGit(repoRoot, ["branch", expectedBranch]);
     await runGit(repoRoot, ["worktree", "add", "-b", actualBranch, realWorktreePath, "HEAD"]);
-    await fs.symlink(realWorktreeRoot, symlinkedWorktreeRoot, "dir");
+    await createTestLink(realWorktreeRoot, symlinkedWorktreeRoot, "dir");
     const { recorder, operations } = createWorkspaceOperationRecorderDouble();
 
     const restored = await ensurePersistedExecutionWorkspaceAvailable({
@@ -5690,6 +5718,35 @@ describe("resolveShell (shell fallback)", () => {
     process.env.SHELL = "/definitely/missing/zsh";
     Object.defineProperty(process, "platform", { value: "linux" });
     expect(resolveShell()).toBe("/bin/sh");
+  });
+});
+
+describe("resolveRuntimeServiceLauncher", () => {
+  it("uses cmd.exe for Windows shell commands", () => {
+    expect(resolveRuntimeServiceLauncher("python -m http.server 8080", "win32")).toEqual({
+      command: "cmd.exe",
+      args: ["/d", "/s", "/c", "python -m http.server 8080"],
+      verbatim: true,
+    });
+  });
+
+  it("starts an absolute Windows executable directly", () => {
+    expect(resolveRuntimeServiceLauncher(
+      '"C:\\Users\\matsg\\AppData\\Local\\Python\\bin\\python.exe" -m http.server 8080',
+      "win32",
+    )).toEqual({
+      command: "C:\\Users\\matsg\\AppData\\Local\\Python\\bin\\python.exe",
+      args: ["-m", "http.server", "8080"],
+      verbatim: false,
+    });
+  });
+
+  it("keeps the POSIX shell launcher on Unix", () => {
+    expect(resolveRuntimeServiceLauncher("python3 -m http.server 8080", "linux")).toEqual({
+      command: resolveShell(),
+      args: ["-lc", "python3 -m http.server 8080"],
+      verbatim: false,
+    });
   });
 });
 

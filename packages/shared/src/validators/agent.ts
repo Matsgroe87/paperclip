@@ -100,6 +100,7 @@ export const createAgentSchema = z.object({
   adapterType: agentAdapterTypeSchema,
   runner: z.enum(["auto", "paperclip", "legacy"]).optional(),
   adapterConfig: adapterConfigSchema.optional().default({}),
+  runtimeProfileId: z.string().uuid().nullable().optional(),
   instructionsBundle: createAgentInstructionsBundleSchema.optional(),
   runtimeConfig: agentRuntimeConfigSchema.optional().default({}),
   defaultEnvironmentId: z.string().guid().optional().nullable(),

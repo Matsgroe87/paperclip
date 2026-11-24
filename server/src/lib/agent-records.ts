@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { and, eq, gte, inArray, lt, sql } from "drizzle-orm";
-import { agents, costEvents, type Db } from "@paperclipai/db";
+import { agents, costEvents, runtimeProfiles, type Db } from "@paperclipai/db";
 import {
   agentAppearanceSchema, resolveAgentAppearance, agentAvatarUrl,
   AGENT_DEFAULT_MAX_CONCURRENT_RUNS, agentRuntimeConfigSchema, getAgentWorkEligibility,
@@ -85,7 +85,7 @@ export interface UpdateAgentOptions {
 
 export type CreateAgentData = Omit<typeof agents.$inferInsert, "companyId" | "lifecycleState" | "lifecycleRequiredPluginIds" | "lifecycleHolds" | "lifecycleVersion" | "lifecycleError" | "lifecycleOperation"> & { runner?: AgentRunnerChoice };
 export type AgentConfigurationRecord = typeof agents.$inferSelect;
-export const AGENT_CONFIGURATION_FIELDS = [...CONFIG_REVISION_FIELDS, "permissions"] as const;
+export const AGENT_CONFIGURATION_FIELDS = [...CONFIG_REVISION_FIELDS, "permissions", "runtimeProfileId"] as const;
 export type AgentConfigurationPatch = Partial<Pick<typeof agents.$inferInsert, typeof AGENT_CONFIGURATION_FIELDS[number]>>;
 export type AgentHireRecord = Pick<typeof agents.$inferSelect, "id" | "companyId" | "adapterType" | "adapterConfig" | "permissions" | "metadata" | "status">;
 
@@ -411,6 +411,20 @@ export function agentRecordQueries(db: Db) {
     }));
   }
 
+  async function attachRuntimeProfiles<T extends { runtimeProfileId: string | null; companyId: string }>(rows: T[]) {
+    const ids = [...new Set(rows.map(row => row.runtimeProfileId).filter((id): id is string => Boolean(id)))];
+    const companyIds = [...new Set(rows.map(row => row.companyId))];
+    const profiles = ids.length ? await db.select({ id: runtimeProfiles.id, companyId: runtimeProfiles.companyId,
+      name: runtimeProfiles.name, adapterType: runtimeProfiles.adapterType }).from(runtimeProfiles)
+      .where(and(inArray(runtimeProfiles.id, ids), inArray(runtimeProfiles.companyId, companyIds))) : [];
+    const byId = new Map(profiles.map(profile => [profile.id, profile]));
+    return rows.map(row => {
+      const profile = row.runtimeProfileId ? byId.get(row.runtimeProfileId) : null;
+      return { ...row, runtimeProfile: profile?.companyId === row.companyId
+        ? { id: profile.id, name: profile.name, adapterType: profile.adapterType } : null };
+    });
+  }
+
   async function getById(id: string) {
     const row = await db
       .select()
@@ -422,7 +436,7 @@ export function agentRecordQueries(db: Db) {
       readAgentReportingChain(db, row),
       hydrateAgentSpend([row]).then((rows) => rows[0]!),
     ]);
-    return normalizeAgentRow(hydrated, chainRows);
+    return (await attachRuntimeProfiles([normalizeAgentRow(hydrated, chainRows)]))[0]!;
   }
 
   async function ensureManager(companyId: string, managerId: string) {
@@ -486,6 +500,6 @@ export function agentRecordQueries(db: Db) {
     });
   }
 
-  return { normalizeAgentRows, normalizeAgentRow, listCompanyAgentRows, listCompanyAgentEligibilityRows, hydrateAgentSpend,
+  return { normalizeAgentRows, normalizeAgentRow, listCompanyAgentRows, listCompanyAgentEligibilityRows, hydrateAgentSpend, attachRuntimeProfiles,
     getById, ensureManager, assertNoCycle, assertCompanyShortnameAvailable, assertBuiltInAgentMetadataMutationAllowed };
 }

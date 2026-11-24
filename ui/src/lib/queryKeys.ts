@@ -1,4 +1,7 @@
 export const queryKeys = {
+  runtimeProfiles: {
+    list: (companyId: string) => ["runtime-profiles", companyId] as const,
+  },
   agentSetupProgress: (id: string | null) => ["agent-setup-progress", id] as const,
   linkPreview: (companyId: string, userId: string | null, url: string) =>
     ["link-preview", companyId, userId, url] as const,

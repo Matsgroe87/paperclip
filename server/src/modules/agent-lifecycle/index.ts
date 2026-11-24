@@ -63,6 +63,11 @@ export async function requestAgentHireInTransaction(tx: Db, effects: LifecycleEf
   return records.create(...args);
 }
 
+export function updateAgentConfigurationInTransaction(tx: Db, effects: LifecycleEffects, publications: ActivityPublication[],
+  id: string, data: AgentConfigurationPatch, options?: UpdateAgentOptions) {
+  return updateAgentConfiguration(tx, effects, id, data, options, publications);
+}
+
 export function createAgentLifecycle(db: Db, effects: LifecycleEffects) {
   assertRootDatabase(db);
   const records = agentRecords(db, effects);

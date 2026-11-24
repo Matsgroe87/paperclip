@@ -134,6 +134,12 @@ export function CompanySettingsSidebar() {
           {showPage("company.secrets") && (
             <SidebarNavItem to="/company/settings/secrets" label="Secrets" icon={KeyRound} end />
           )}
+          <SidebarNavItem
+            to="/company/settings/runtime-profiles"
+            label="Runtime profiles"
+            icon={Cpu}
+            end
+          />
           {showPage("instance.environments") && (
             <SidebarNavItem
               to={`${INSTANCE_SETTINGS_PATH_PREFIX}/environments`}

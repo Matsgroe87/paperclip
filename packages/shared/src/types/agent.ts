@@ -18,6 +18,7 @@ import type {
 import type { AgentOrgChainHealth } from "../agent-eligibility.js";
 import type { AgentApiKeyScope } from "../validators/agent.js";
 import type { AgentInteractionPermissions } from "../agent-interaction-permissions.js";
+import type { RuntimeProfile } from "./runtime-profile.js";
 
 export interface AgentPermissions extends Record<string, unknown> {
   canCreateAgents: boolean;
@@ -111,6 +112,8 @@ export interface Agent {
   /** Non-fatal options ignored by this configuration write; not persisted. */
   configurationWarnings?: import("../runner-configuration-warnings.js").AgentConfigurationWarning[];
   runtimeConfig: AgentRuntimeConfig;
+  runtimeProfileId?: string | null;
+  runtimeProfile?: Pick<RuntimeProfile, "id" | "name" | "adapterType"> | null;
   defaultEnvironmentId?: string | null;
   budgetMonthlyCents: number;
   spentMonthlyCents: number;

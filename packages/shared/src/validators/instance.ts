@@ -5,6 +5,7 @@ import {
   WEEKLY_RETENTION_PRESETS,
   MONTHLY_RETENTION_PRESETS,
   DEFAULT_BACKUP_RETENTION,
+  DEFAULT_EXECUTION_GOVERNANCE,
 } from "../types/instance.js";
 import { feedbackDataSharingPreferenceSchema } from "./feedback.js";
 import { shapeWithoutDefaults } from "./partial.js";
@@ -22,12 +23,24 @@ export const backupRetentionPolicySchema = z.object({
   monthlyMonths: presetSchema(MONTHLY_RETENTION_PRESETS, "monthlyMonths").default(DEFAULT_BACKUP_RETENTION.monthlyMonths),
 });
 
+export const instanceExecutionGovernanceSettingsSchema = z.object({
+  providerConcurrency: z.record(z.string(), z.number().int().min(1).max(50)).default(
+    DEFAULT_EXECUTION_GOVERNANCE.providerConcurrency,
+  ),
+  providerQuotaCircuitBreaker: z.boolean().default(DEFAULT_EXECUTION_GOVERNANCE.providerQuotaCircuitBreaker),
+  providerRetryJitterSec: z.number().int().min(0).max(3600).default(DEFAULT_EXECUTION_GOVERNANCE.providerRetryJitterSec),
+  providerDailyTokenLimits: z.record(z.string(), z.number().int().min(0)).default(
+    DEFAULT_EXECUTION_GOVERNANCE.providerDailyTokenLimits,
+  ),
+}).strict();
+
 export const instanceGeneralSettingsSchema = z.object({
   censorUsernameInLogs: z.boolean().default(false),
   feedbackDataSharingPreference: feedbackDataSharingPreferenceSchema.default(
     DEFAULT_FEEDBACK_DATA_SHARING_PREFERENCE,
   ),
   backupRetention: backupRetentionPolicySchema.default(DEFAULT_BACKUP_RETENTION),
+  executionGovernance: instanceExecutionGovernanceSettingsSchema.default(DEFAULT_EXECUTION_GOVERNANCE),
   // Execution policy. Absent/"any" = unrestricted; "kubernetes" forces the
   // Kubernetes sandbox provider and denies local/ssh execution (cloud_tenant).
   executionMode: z.enum(["kubernetes", "any"]).optional(),
@@ -152,6 +165,9 @@ export const startTaskDrainRequestSchema = z.object({
   { message: "Idle holds require ttlMs between 5000 and 300000", path: ["ttlMs"] });
 
 export type InstanceGeneralSettings = z.infer<typeof instanceGeneralSettingsSchema>;
+export type InstanceExecutionGovernanceSettings = z.infer<
+  typeof instanceExecutionGovernanceSettingsSchema
+>;
 // The patch schema removes each default so an absent key stays absent. Declare
 // the type from the full settings type, so every field keeps its precise type.
 export type PatchInstanceGeneralSettings = Partial<InstanceGeneralSettings>;

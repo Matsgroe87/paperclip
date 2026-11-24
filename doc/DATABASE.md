@@ -414,6 +414,12 @@ register before writing, or they can remain unseen until the next startup or
 another notification. Tests should verify both the producer and its outer
 transaction boundary.
 
+Instance-wide provider execution governance is stored in the JSON
+`instance_settings.general.executionGovernance` object. It does not require a
+schema migration. The object controls provider concurrency, quota circuit
+breakers, reset jitter, and optional provider daily token limits. Per-agent
+heartbeat run and token caps remain in `agents.runtime_config.heartbeat`.
+
 ## Plugin database namespaces
 
 The plugin runtime tracks plugin-owned database namespaces and migrations in `plugin_database_namespaces` and `plugin_migrations`. Hosted deployments that separate runtime and migration connections should set `DATABASE_MIGRATION_URL`; plugin namespace migration work uses the migration connection when present.

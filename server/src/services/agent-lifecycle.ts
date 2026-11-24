@@ -102,6 +102,11 @@ export function createAgentLifecycle(db: Db, hooks: BudgetServiceHooks = {}) {
   return lifecycle.createAgentLifecycle(db, createAgentLifecycleEffects(hooks));
 }
 
+export function updateAgentConfigurationInTransaction(tx: Db, publications: ActivityPublication[],
+  id: string, data: Parameters<ReturnType<typeof createAgentLifecycle>["updateConfiguration"]>[1]) {
+  return lifecycle.updateAgentConfigurationInTransaction(tx, createAgentLifecycleEffects(), publications, id, data);
+}
+
 export function initializeImportedAgentConfigurationInTransaction(tx: Db, publications: ActivityPublication[],
   id: string, data: Parameters<typeof lifecycle.initializeImportedAgentConfigurationInTransaction>[4]) {
   return lifecycle.initializeImportedAgentConfigurationInTransaction(tx, createAgentLifecycleEffects(), publications, id, data);

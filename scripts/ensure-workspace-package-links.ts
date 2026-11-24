@@ -11,6 +11,16 @@ type WorkspaceLinkMismatch = {
   actualPath: string | null;
 };
 
+function isSymlinkPrivilegeError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: string; message?: string };
+  return (
+    candidate.code === "EPERM" ||
+    /privilege required/i.test(candidate.message ?? "") ||
+    /operation not permitted/i.test(candidate.message ?? "")
+  );
+}
+
 function readJsonFile(filePath: string): Record<string, unknown> {
   return JSON.parse(readFileSync(filePath, "utf8")) as Record<string, unknown>;
 }
@@ -101,7 +111,14 @@ async function ensureWorkspaceLinksCurrent(workspaceDir: string) {
     const linkPath = path.join(repoRoot, mismatch.workspaceDir, "node_modules", ...mismatch.packageName.split("/"));
     await fs.mkdir(path.dirname(linkPath), { recursive: true });
     await fs.rm(linkPath, { recursive: true, force: true });
-    await fs.symlink(mismatch.expectedPath, linkPath);
+    try {
+      await fs.symlink(mismatch.expectedPath, linkPath);
+    } catch (error) {
+      if (!isSymlinkPrivilegeError(error)) throw error;
+      // Windows allows directory junctions without the Developer Mode or
+      // SeCreateSymbolicLinkPrivilege requirement that blocks normal symlinks.
+      await fs.symlink(mismatch.expectedPath, linkPath, "junction");
+    }
   }
 
   const remainingMismatches = findWorkspaceLinkMismatches(workspaceDir);

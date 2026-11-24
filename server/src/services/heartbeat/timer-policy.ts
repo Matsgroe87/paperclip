@@ -166,6 +166,13 @@ export function createHeartbeatTimerPolicy(db: Pick<Db, "select">) {
       const cap = heartbeatDailyCapFromTotals(policy, { runs: Number(row?.total ?? 0) }, { checkCostCap: false });
       if (cap) return cap;
     }
+    const tokenLimit = normalizeOptionalNonNegativeInteger(parseObject(parseObject(agent.runtimeConfig).heartbeat).maxDailyTokens);
+    if (options.checkCostCap !== false && tokenLimit !== null && tokenLimit > 0) {
+      const [row] = await client.select({ total: sql<number>`coalesce(sum(${costEvents.inputTokens} + ${costEvents.outputTokens})::bigint, 0)` })
+        .from(costEvents).where(dailyCostConditions(and(eq(costEvents.companyId, agent.companyId), eq(costEvents.agentId, agent.id))!, now));
+      const observed = Number(row?.total ?? 0);
+      if (observed >= tokenLimit) return { reason: "heartbeat.daily_token_limit", observed, limit: tokenLimit };
+    }
     if (options.checkCostCap !== false && policy.maxDailyCostCents !== null) {
       const [row] = await client.select({ total: sql<string>`coalesce(sum(${costEvents.costCents}), 0)::text` }).from(costEvents)
         .where(dailyCostConditions(and(eq(costEvents.companyId, agent.companyId), eq(costEvents.agentId, agent.id))!, now));
@@ -187,6 +194,8 @@ export function createHeartbeatTimerPolicy(db: Pick<Db, "select">) {
     return projectTimerHeartbeatSchedule(agent, now, { actionable, cap });
   }
   async function readTimerHeartbeatSchedules(candidates: TimerAgent[], now: Date, checkBudget: () => void = () => {}) {
+    // Token-capped agents need the same admission check used by direct starts.
+    if (candidates.some(agent => Number(parseObject(parseObject(agent.runtimeConfig).heartbeat).maxDailyTokens) > 0)) return;
     if (candidates.length > 10_000) return;
     const allowed = new Set(candidates.map(agent => timerKey(agent.companyId, agent.id)));
     if (allowed.size !== candidates.length) return;

@@ -12,6 +12,10 @@ import { hasAutomaticInteractionDeliveryHold, INTERACTION_DELIVERY_DENIED, reche
 import { deferredWorkIntentWait } from "../work-intent-outbox.js";
 import { notifyIssueGraphRecovery } from "../issue-recovery-notifications.js";
 import { createHeartbeatTimerPolicy } from "./timer-policy.js";
+import { getProviderAdmissionBlock } from "../provider-execution-governance.js";
+import { normalizeExecutionGovernanceSettings } from "../instance-settings.js";
+
+class ProviderAdmissionHeld extends Error {}
 import { QUEUED_RUN_AGING_MS, RECOVERY_WAKE_REASONS, createQueuedRunDispatcher, hasQueuedRunAged, isPersonRequestedRun, queuedRunDispatchClass } from "./queued-run-dispatch-order.js";
 import { reserveAutomaticRunStart } from "../recovery/automatic-run-brake.js";
 import { queuedRunDispatchFacts } from "./queued-run-line.js";
@@ -242,7 +246,8 @@ export interface HeartbeatQueueDependencies extends Pick<HeartbeatRetryDependenc
   issuesSvc: Pick<ReturnType<typeof issueService>, "getDependencyReadiness" | "listDependencyReadiness" | "updateForCompany">;
   treeControlSvc: Pick<ReturnType<typeof issueTreeControlService>, "getActivePauseHoldGate">;
   budgets: Pick<ReturnType<typeof budgetService>, "getInvocationBlock">;
-  instanceSettings: Pick<ReturnType<typeof instanceSettingsService>, "getExperimental">;
+  instanceSettings: Pick<ReturnType<typeof instanceSettingsService>, "getExperimental"> &
+    Partial<Pick<ReturnType<typeof instanceSettingsService>, "getGeneral">>;
   runDispatch: Pick<ReturnType<typeof createRunDispatch>, "cancelStaleQueuedRun">;
   wakeQueue: Pick<ReturnType<typeof createWakeQueue>, "preflightIssueWake" | "admitIssueWake">;
   activeRunExecutions: Set<string>;
@@ -1161,6 +1166,16 @@ export function createHeartbeatQueue(db: Db, dependencies: HeartbeatQueueDepende
       );
       return null;
     }
+    const providerGovernance = agent.adapterType === "claude_local" && instanceSettings.getGeneral
+      ? normalizeExecutionGovernanceSettings((await instanceSettings.getGeneral()).executionGovernance) : null;
+    async function assertProviderAdmission(tx: Pick<Db, "select" | "execute">) {
+      if (!providerGovernance) return;
+      const block = await getProviderAdmissionBlock(tx, agent!, new Date(), providerGovernance);
+      if (block) {
+        logger.debug({ runId: run.id, agentId: agent!.id, ...block }, "Queued run held by provider execution governance");
+        throw new ProviderAdmissionHeld();
+      }
+    }
     // Keep accepted work in the durable queue until setup completes.
     if (isAgentAwaitingSetup(agent)) return null;
     const invokability = companyAgents
@@ -1666,6 +1681,7 @@ export function createHeartbeatQueue(db: Db, dependencies: HeartbeatQueueDepende
                 await withExternalAdmissionGuard(tx, run.companyId, run.agentId, async () => {
                   await assertNoExternalOverlap(tx, run.companyId, run.agentId);
                   await assertAgentRunSlotFree(tx, run);
+                  await assertProviderAdmission(tx);
                 });
                 await notifyChatRunMilestones(tx, { companyId: run.companyId, issueId });
                 const [claimedRun] = await tx
@@ -1765,6 +1781,7 @@ export function createHeartbeatQueue(db: Db, dependencies: HeartbeatQueueDepende
               await withExternalAdmissionGuard(tx, run.companyId, run.agentId, async () => {
                 await assertNoExternalOverlap(tx, run.companyId, run.agentId);
                 await assertAgentRunSlotFree(tx, run);
+                await assertProviderAdmission(tx);
               });
               await notifyChatRunMilestones(tx, { companyId: run.companyId, issueId });
               await tx
@@ -1809,6 +1826,7 @@ export function createHeartbeatQueue(db: Db, dependencies: HeartbeatQueueDepende
             .catch((error) => {
               if (isExternalChatWaitAuthorizationContention(error) || error instanceof RunAdmissionClosedDuringClaim)
                 return { kind: "stale" as const, run: null };
+              if (error instanceof ProviderAdmissionHeld) return { kind: "stale" as const, run: null };
               if (error instanceof AgentRunSlotsFull) {
                 if (slots) slots.full = true;
                 return { kind: "stale" as const, run: null };
@@ -1888,6 +1906,7 @@ export function createHeartbeatQueue(db: Db, dependencies: HeartbeatQueueDepende
             await withExternalAdmissionGuard(claimTx, run.companyId, run.agentId, async () => {
               await assertNoExternalOverlap(claimTx, run.companyId, run.agentId);
               await assertAgentRunSlotFree(claimTx, run);
+              await assertProviderAdmission(claimTx);
             });
             await notifyChatRunMilestones(claimTx, { companyId: run.companyId, runId: run.id, issueId: issueId ?? undefined });
             const claimedRun = await claimTx.update(heartbeatRuns).set(claimValues).where(and(
@@ -1898,7 +1917,7 @@ export function createHeartbeatQueue(db: Db, dependencies: HeartbeatQueueDepende
             return claimedRun;
           });
         }).catch((error: unknown) => {
-          if (error instanceof RunAdmissionClosedDuringClaim) return null;
+          if (error instanceof RunAdmissionClosedDuringClaim || error instanceof ProviderAdmissionHeld) return null;
           if (error instanceof AgentRunSlotsFull) {
             if (slots) slots.full = true;
             return null;

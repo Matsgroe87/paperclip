@@ -40,8 +40,10 @@ export {
 export {
   instanceSettingsSchema,
   instanceGeneralSettingsSchema,
+  instanceExecutionGovernanceSettingsSchema,
   patchInstanceGeneralSettingsSchema,
   type InstanceGeneralSettings,
+  type InstanceExecutionGovernanceSettings,
   type PatchInstanceGeneralSettings,
   instanceExperimentalSettingsSchema,
   instanceExperimentalSettingsWithManagedSchema,

@@ -480,7 +480,7 @@ function isolatedTestEnv() {
 async function collectVitestList(filters, { testRoot, env }, name) {
   const output = path.join(testRoot, `${name}.json`);
   await new Promise((resolve, reject) => {
-    const child = spawn("pnpm", ["exec", "vitest", "list", ...sourceOnlyVitestArgs,
+    const child = spawn(process.execPath, [path.join(repoRoot, "node_modules/vitest/vitest.mjs"), "list", ...sourceOnlyVitestArgs,
       ...filters, "--allowOnly=false", "--includeTaskLocation", `--json=${output}`], {
       cwd: repoRoot, env, stdio: "inherit",
     });
@@ -524,8 +524,8 @@ async function runVitest(args, label, testShard = null, exactFiles = false) {
     args = [...args.filter((arg) => arg !== chatSuite), ...runFilters, "--allowOnly=false"];
   }
   await new Promise((resolve, reject) => {
-    const command = exactFiles ? process.execPath : "pnpm";
-    const prefix = exactFiles ? [path.join(scriptsDir, "ci/run-selected-vitest.mjs")] : ["exec", "vitest", "run"];
+    const command = process.execPath;
+    const prefix = exactFiles ? [path.join(scriptsDir, "ci/run-selected-vitest.mjs")] : [path.join(repoRoot, "node_modules/vitest/vitest.mjs"), "run"];
     // `vitest list` collection above never retries; only the run does.
     const child = spawn(command, [...prefix, ...sourceOnlyVitestArgs, ...vitestRetryArgs(), ...args], {
       cwd: repoRoot,
