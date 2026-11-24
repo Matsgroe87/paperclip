@@ -55,7 +55,7 @@ function log(message) {
 
 function exec(command, args, cwd, env = process.env) {
   const started = Date.now();
-  const result = spawnSync(command, args, { cwd, env, stdio: "inherit" });
+  const result = spawnSync(command, args, { cwd, env, stdio: "inherit", shell: process.platform === "win32" && command === "pnpm" });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`${command} ${args.join(" ")} failed with exit ${result.status ?? result.signal}`);
   return (Date.now() - started) / 1000;
@@ -82,7 +82,7 @@ export function installKey(root, toolchain) {
     ":(glob)**/package.json", "patches"], { cwd: root, encoding: "utf8" });
   if (tracked.status !== 0) return null;
   const files = tracked.stdout.split("\0").filter(Boolean);
-  const pnpm = spawnSync("pnpm", ["--version"], { cwd: root, encoding: "utf8" }).stdout?.trim();
+  const pnpm = spawnSync("pnpm", ["--version"], { cwd: root, encoding: "utf8", shell: process.platform === "win32" }).stdout?.trim();
   return hashFiles(root, files).update(JSON.stringify({ node: toolchain.node, platform: toolchain.platform,
     arch: toolchain.arch, pnpm })).digest("hex");
 }

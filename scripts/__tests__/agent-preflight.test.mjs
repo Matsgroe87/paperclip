@@ -29,7 +29,7 @@ fs.writeFileSync(path.join(target, "dist/index.js"), "export {};\\n");
     writeFileSync(path.join(root, target, "tsconfig.json"), "{}");
   }
   const builds = () => existsSync(path.join(root, "builds"))
-    ? readFileSync(path.join(root, "builds"), "utf8").trim().split("\n") : [];
+    ? readFileSync(path.join(root, "builds"), "utf8").trim().split("\n").map(line => line.split(path.sep).join("/")) : [];
   return { root, builds };
 }
 
